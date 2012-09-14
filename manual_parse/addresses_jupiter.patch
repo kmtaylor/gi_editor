@@ -1,0 +1,23 @@
+--- midi_addresses.old	2012-06-05 18:23:22.000000000 +1000
++++ midi_addresses.txt	2012-06-05 18:24:21.000000000 +1000
+@@ -75,7 +75,19 @@
+ | 00 13 00 | Registration Part (PERC) |
+ | 00 20 00 | Registration Ext Part (Part 1) |
+ | 00 21 00 | Registration Ext Part (Part 2) |
+-| : | |
++| 00 22 00 | Registration Ext Part (Part 3) |
++| 00 23 00 | Registration Ext Part (Part 4) |
++| 00 24 00 | Registration Ext Part (Part 5) |
++| 00 25 00 | Registration Ext Part (Part 6) |
++| 00 26 00 | Registration Ext Part (Part 7) |
++| 00 27 00 | Registration Ext Part (Part 8) |
++| 00 28 00 | Registration Ext Part (Part 9) |
++| 00 29 00 | Registration Ext Part (Part 10) |
++| 00 2a 00 | Registration Ext Part (Part 11) |
++| 00 2b 00 | Registration Ext Part (Part 12) |
++| 00 2c 00 | Registration Ext Part (Part 12) |
++| 00 2d 00 | Registration Ext Part (Part 14) |
++| 00 2e 00 | Registration Ext Part (Part 15) |
+ | 00 2F 00 | Registration Ext Part (Part 16) |
+ | 00 30 00 | Registration Controller |
+ | 00 40 00 | Registration Sub Part (SOLO) |

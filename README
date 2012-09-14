@@ -1,0 +1,59 @@
+A software editor for the Juno Gi, based on Roland's midi specification.
+
+To build:
+
+Requirements:
+ - Jack Audio Connection Kit
+ - glib (part of the gtk project)
+ - pdftotext (part of the poppler project)
+ - flex and bison
+ - gcc and make
+
+First, the midi address database needs to be built.
+This requires the document entitled: "JUNO-Gi MIDI Implementation", which is
+available from the Roland website.
+
+Place this file in the /manual_parse directory, named as midi_manual.pdf
+
+gi_editor/manual_parse$ make
+
+This will build midi_addresses.c needed by libgieditor.
+Once this has been done once, it need not be ever done again.
+
+Then return to the top level directory and type make:
+
+gi_editor$ make
+
+This will build:
+read_midi	- Lists SysEx midi events and describes them according to the
+		  Roland midi manual.
+sysex_explorer	- Patch editing, loading and unloading. You will probably want
+		  to customise sysex_explorer.h to meet your needs. In
+		  particular, you'll need to set PATCHDIR to something useful.
+		  (This is the location where saved patches are written to/
+		  read from).
+		  Another file location #define is LOGFILE in log.h
+translator	- A tool to map midi controllers to Juno-Gi specific SysEx
+		  instructions.
+midi2jacksync	- A handy tool that is useful for syncing Jack transport to the
+		  Juno-Gi's digital recorder.
+
+Use:
+To use each programme, the Jack daemon must be running and a midi connection
+must be made between each application and the Juno.
+
+Note that on my system, Jack doesn't expose hardware midi interfaces by default.
+If you are using qjackctl, click on 'Setup' and select the 'Raw' or 'Seq' midi
+driver.
+
+Also note that the Gi is not currently (at the time of writing) included in the
+alsa kernel driver. Please see my post on Rolandclan regarding this.
+Having said that, if you want to use midi2jacksync, you will require a midi to
+USB converter cable. I use the Roland UM-ONE. This is required because the
+Juno-Gi does not output Midi Clock on the in-built USB interface.
+
+Roadmap:
+
+1. Write patch loading, unloading and editing interface. (Complete)
+2. Write midi mapper, mapping arbitrary midi instructions to Juno Gi sysex
+   events. (Complete)

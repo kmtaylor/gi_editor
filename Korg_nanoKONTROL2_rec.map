@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ArdourMIDIBindings version="1.1.0" name="Korg nanoKONTROL2, record only">
+
+  <Binding msg="B0 2d 7f" function="rec-enable"/>
+  <Binding msg="B0 2d 00" function="rec-disable"/>
+
+ </ArdourMIDIBindings>
