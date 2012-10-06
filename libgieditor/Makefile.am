@@ -4,8 +4,11 @@ lib_LTLIBRARIES = libgieditor.la
 BUILT_SOURCES = midi_addresses.c
 
 libgieditor_la_SOURCES = libgieditor.c sysex.c
+libgieditor_la_LDFLAGS = -version-info 0:1:0 @create_shared_lib@
+libgieditor_la_LIBADD = $(top_srcdir)/common/libcommon.la \
+		       $(JACK_LIBS) $(GLIB_LIBS)
 nodist_libgieditor_la_SOURCES = midi_addresses.c
-libgieditor_la_CFLAGS = $(GLIB_CFLAGS)
+libgieditor_la_CFLAGS = $(GLIB_CFLAGS) $(JACK_CFLAGS)
 
 midi_addresses.c: $(top_srcdir)/manual_parse/manual_parse
 	$(top_srcdir)/manual_parse/manual_parse > $@ \

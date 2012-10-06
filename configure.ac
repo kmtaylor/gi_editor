@@ -20,11 +20,25 @@ AC_CONFIG_FILES([
 AC_CONFIG_MACRO_DIR([m4])
 
 PKG_CHECK_MODULES([GLIB], [glib-2.0])
-PKG_CHECK_MODULES([JACK], [jack])
 PKG_CHECK_MODULES([NCURSES], [ncurses])
 PKG_CHECK_MODULES([PANEL], [panel])
 PKG_CHECK_MODULES([FORM], [form])
 PKG_CHECK_MODULES([MENU], [menu])
+
+create_shared_lib=""
+case "$host_os" in
+    cygwin*)
+	create_shared_lib="-no-undefined"
+	AC_ARG_VAR([JACK_LIBS], [linker flags for jack])
+	AC_ARG_VAR([JACK_CFLAGS], [C compiler flags for jack])
+	JACK_LIBS="-L../Jack/lib -ljack -lpthread -lrt"
+	JACK_CFLAGS="-I\$(top_srcdir)/Jack/includes"
+	;;
+    *) 
+	PKG_CHECK_MODULES([JACK], [jack])
+esac
+
+AC_SUBST(create_shared_lib)
 
 AC_ARG_VAR([PDFTOTEXT],
 [Required for parsing the midi implementation manual. It seems that there might
