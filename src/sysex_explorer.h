@@ -30,7 +30,7 @@ extern void *__interface_allocate(size_t size, char *func_name);
 #define ARRAY_SIZE(a) (sizeof(a) / sizeof(a[0]))
 #define CLIENT_NAME "sysex_explorer"
 
-#define PATCHDIR "Patches"
+#define PATCHDIR "/home/kmtaylor/synth/patches/Patches"
 
 typedef struct {
 	char *name;

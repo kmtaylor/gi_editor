@@ -57,6 +57,7 @@ struct s_midictl_list {
 };
 
 static int tempo;
+static int do_sync;
 
 /* Only access with midi_lock */
 static Midictl_list midictl_in_list;
@@ -215,8 +216,11 @@ static int jack_init(const char *client_name) {
 	if (!(midi_in_port || midi_led_port)) return -1;
 	
 	jack_set_process_callback(jack_client, process_callback, 0);
-	if (jack_set_timebase_callback(jack_client, 
+
+	if (do_sync) {
+	    if (jack_set_timebase_callback(jack_client, 
 				0, timebase_callback, 0) < 0) return -1;
+	}
 
 	if (jack_activate(jack_client)) return -1;
 
@@ -319,12 +323,16 @@ static int process_read_data(void) {
 int main(int argc, char **argv) {
 	if (argc < 2) {
 	    printf("Usage: %s tempo\n", argv[0]);
+	    printf("To disable midi clock synchronisation, "
+			    "enter a negative tempo\n");
 	    exit(1);
 	}
 
 	tempo = atoi(argv[1]);
-
-	printf("Midi clock tempo: %ibpm\n", tempo);
+	if (tempo > 0) {
+	    do_sync = 1;
+	    printf("Midi clock tempo: %ibpm\n", tempo);
+	}
 
 	if (jack_init(CLIENT_NAME) < 0) {
 	    printf("Couldn't initialise jack client.\n"

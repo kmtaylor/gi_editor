@@ -21,7 +21,7 @@
  */
 
 #ifndef LOGFILE
-#define LOGFILE "midi.log"
+#define LOGFILE "/var/log/gi_log"
 #endif
 
 #ifndef USE_LOG
