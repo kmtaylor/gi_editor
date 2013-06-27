@@ -34,8 +34,6 @@
 #define AINPUT_CHANNELS 7
 #define DINPUT_CHANNELS 2
 #define WAKE_VOLTS 155
-#define TIMER_30MINS 198    /* 30 * 60 / 9.1 */
-#define TIMER_5MINS 33	    /*  5 * 60 / 9.1 */
 
 #ifndef EEPROM_BROKEN
 static unsigned char w_volts __attribute__((section(".eeprom"))) = WAKE_VOLTS;
@@ -44,8 +42,8 @@ static unsigned char wake_volts;
 
 /* Interrupt once per second */
 ISR(TIMER1_OVF_vect) {
-	send_packet();
-	PORTB ^= (1<<PB2);
+//	send_packet();
+//	PORTB ^= (1<<PB2);
 }
 
 static inline void setup_ports(void) {
@@ -114,17 +112,20 @@ int main (void) {
 	init_node();
 	init_uart();
 	start_timer1();
-	tx_buf[0] = 0x90;
-	tx_buf[1] = 0x27;
-	tx_buf[2] = 0x36;
 	sei();
 	while (1) {
-#if 0
 	    if (packet_status == PACKET_IN_READY) {
-		if (check_rx_packet()) process_command(&rx_buf[4]);
+		PORTB ^= (1<<PB2);
+		memcpy(tx_buf, rx_buf, LOCAL_PACKET_BUF_SIZE);
+		send_packet();
+
 		receive_packet();
 	    }
-#endif
-	    sleep_mode();
+	    if (packet_status == PACKET_RLTM_READY) {
+		PORTB ^= (1<<PB2);
+
+		receive_packet();
+	    }
+	    //sleep_mode();
 	}
 }

@@ -109,118 +109,139 @@ void send_packet(void) {
  * The interrupt routine does not use the standard epilogue/prologue provided
  * by gcc, this wastes too many cycles. Instead, all registers are reserved
  * as global except the pointer registers r30 and r31 these are saved and
- * restored when appropriate */
+ * restored when appropriate
+ * At the moment, it only handles Sysex messages with a fixed length (equal to
+ * LOCAL_PACKET_BUF_SIZE 
+ * Realtime messages also need to be caught here. */
 ISR(RX_INT_VECT, ISR_NAKED) {
 	static uint8_t p;
 	asm volatile (
-	"	in r16,__SREG__		\n\t" /* (1) */	    /* Prologue */
-	"	push r16		\n\t" /* (2) */
-	"	ldi r16,0		\n\t" /* (1) */
-	"	sbic %3,%4		\n\t" /* (1/2/3) */ /* Read start */
-	"	inc r16			\n\t" /* (1) */
-	"	sbic %3,%4		\n\t" /* (1/2/3) */
-	"	inc r16			\n\t" /* (1) */
-	"	sbic %3,%4		\n\t" /* (1/2/3) */
-	"	inc r16			\n\t" /* (1) */
-	"	cpi r16,2		\n\t" /* (1) */
-	"	brlo rinit    		\n\t" /* (2) */
-	"	rjmp rexit    		\n\t" /* (2) */	    /* Frame error */
-      	"rinit:	clr r10			\n\t" /* (1) */
-      	"	clr r11			\n\t" /* (1) */
- 	"	lds r12,%1		\n\t" /* (2) */
-	"	clr r13			\n\t" /* (1) */
-      	"	inc r13			\n\t" /* (1) */
-	"	push r30		\n\t" /* (2) */
-	"	push r31		\n\t" /* (2) */
-      	"	mov r30,r12		\n\t" /* (1) */
-      	"	ldi r31,0		\n\t" /* (1) */
-      	"	subi r30,lo8(-(%0-1))	\n\t" /* (1) */	    /* Load buffer */
-      	"	sbci r31,hi8(-(%0-1))	\n\t" /* (1) */
-	"	rjmp w6			\n\t" /* (2) */
-	"rloop:	ldi r16,1		\n\t" /* (1) */
-	"	cp r11,r16		\n\t" /* (1) */
-	"	brne 1f    		\n\t" /* (1/2) */
-	"	ldi r16,1		\n\t" /* (1) */
-	"	cp r12,r16		\n\t" /* (1) */
-	"	brlo w6    		\n\t" /* (1/2) */
-	"	lds r16,(%0+%5-1)	\n\t" /* (2) */
-	"	st Z,r16		\n\t" /* (2) */
-	"	rjmp w1			\n\t" /* (2) */
-	"1:	ldi r16,2		\n\t" /* (1) */
-	"	cp r11,r16		\n\t" /* (1) */	    /* Cleanup */
-	"	brne w5			\n\t" /* (1/2) */
-	"	pop r31			\n\t" /* (2) */
-	"	pop r30			\n\t" /* (2) */
-	"	rjmp read		\n\t" /* (2) */
-	"w6:	nop			\n\t" /* (1) */
-	"w5:	nop			\n\t" /* (1) */
-	"	nop			\n\t" /* (1) */
-	"	nop			\n\t" /* (1) */
-	"	nop			\n\t" /* (1) */
-	"w1:	nop			\n\t" /* (1) */
-	"read:	ldi r16,0		\n\t" /* (1) */	    /* Read input */
-      	"	sbis %3,%4		\n\t" /* (1/2/3) */
-	"	inc r16			\n\t" /* (1) */
-      	"	sbis %3,%4		\n\t" /* (1/2/3) */
-	"	inc r16			\n\t" /* (1) */
-      	"	sbis %3,%4		\n\t" /* (1/2/3) */
-	"	inc r16			\n\t" /* (1) */
-	"	cpi r16,2		\n\t" /* (1) */	    /* Majority wins */
-      	"	brsh 1f			\n\t" /* (2) */
-      	"	or r10,r13		\n\t" /* (1) */	    /* Received low */
-	"	nop			\n\t" /* (1) */
-	"	rjmp 2f			\n\t" /* (2) */
-      	"1:	mov r16,r13		\n\t" /* (1) */	    /* Received high */
-      	"	com r16			\n\t" /* (1) */
-      	"	and r10,r16		\n\t" /* (1) */
-      	"2:	lsl r13			\n\t" /* (1) */
-      	"	inc r11			\n\t" /* (1) */
-	"	ldi r16,8		\n\t" /* (1) */
-      	"	cp r11,r16		\n\t" /* (1) */
-      	"	brne rloop  		\n\t" /* (1/2) */
-      	"	sts (%0+%5-1),r10	\n\t" /* (2) */
- 	"	lds r16,%0		\n\t" /* (2) */	    /* Check byte 0 */
-      	"	cpi r16,%6		\n\t" /* (1) */
-      	"	brne rexit    		\n\t" /* (1/2) */
- 	"	lds r16,(%0+1)		\n\t" /* (2) */	    /* Check byte 1 */
-      	"	cpi r16,%6		\n\t" /* (1) */
-      	"	breq rexit		\n\t" /* (1/2) */
-	"	ldi r16,(%5-1)		\n\t" /* (1) */
-      	"	cp r12,r16		\n\t" /* (1) */	    /* Check byte n */
-      	"	brne rstop  		\n\t" /* (1/2) */
-	"	ldi r16,0		\n\t" /* (1) */
- 	"	sts %1,r16		\n\t" /* (2) */
- 	"	mov r16,r10		\n\t" /* (2) */
-      	"	cpi r16,%7		\n\t" /* (1) */
-      	"	brne rexit    		\n\t" /* (1/2) */
-      	"	ldi r16,%8		\n\t"		    /* Time is not */
- 	"	sts %2,r16		\n\t"		    /* critical here */
-	"	ldi r16,%10		\n\t"
-	"	mov r10,r16		\n\t"
-	"	com r10			\n\t"
-	"	lds r16,%9		\n\t"
-	"	and r16,r10		\n\t"
-	"	sts %9,r16		\n\t"		    /* Disable int */
-	"	rjmp rexit    		\n\t" /* (2) */
-	"rstop:	ldi r16,0		\n\t" /* (1) */	    /* Read stop */
-	"	sbis %3,%4		\n\t" /* (1/2/3) */
-	"	inc r16			\n\t" /* (1) */
-	"	sbis %3,%4		\n\t" /* (1/2/3) */
-	"	inc r16			\n\t" /* (1) */
-	"	sbis %3,%4		\n\t" /* (1/2/3) */
-	"	inc r16			\n\t" /* (1) */
-	"	cpi r16,2		\n\t" /* (1) */
-	"	brsh rexit    		\n\t" /* (2) */
-	"	inc r12			\n\t" /* (1) */	    /* Byte valid */
-	"	sts %1,r12		\n\t" /* (2) */
-	"rexit:	pop r16			\n\t" /* (2) */	    /* Epilogue */
-	"	out __SREG__,r16	\n\t" /* (1) */
-        "	reti"			      /* (4) */
+	"	in r16,__SREG__		    \n\t" /* (1) */ /* Prologue */
+	"	push r16		    \n\t" /* (2) */
+	"	ldi r16,0		    \n\t" /* (1) */
+	"	sbic %[rx_port],%[rx_pin]   \n\t" /* (1/2/3) */ /* Read start */
+	"	inc r16			    \n\t" /* (1) */
+	"	sbic %[rx_port],%[rx_pin]   \n\t" /* (1/2/3) */
+	"	inc r16			    \n\t" /* (1) */
+	"	sbic %[rx_port],%[rx_pin]   \n\t" /* (1/2/3) */
+	"	inc r16			    \n\t" /* (1) */
+	"	cpi r16,2		    \n\t" /* (1) */
+	"	brlo rinit		    \n\t" /* (1/2) */
+	"	rjmp rexit		    \n\t" /* (2) */ /* Frame error */
+      	"rinit:	clr r10			    \n\t" /* (1) */
+      	"	clr r11			    \n\t" /* (1) */
+ 	"	lds r12,%[p]		    \n\t" /* (2) */
+	"	clr r13			    \n\t" /* (1) */
+      	"	inc r13			    \n\t" /* (1) */
+	"	push r30		    \n\t" /* (2) */
+	"	push r31		    \n\t" /* (2) */
+      	"	mov r30,r12		    \n\t" /* (1) */
+      	"	ldi r31,0		    \n\t" /* (1) */
+      	"	subi r30,lo8(-(%[rx_buf]-1))\n\t" /* (1) */ /* Load buffer */
+      	"	sbci r31,hi8(-(%[rx_buf]-1))\n\t" /* (1) */
+	"	rjmp w6			    \n\t" /* (2) */
+	"rloop:	ldi r16,1		    \n\t" /* (1) */
+	"	cp r11,r16		    \n\t" /* (1) */
+	"	brne 1f			    \n\t" /* (1/2) */
+	"	ldi r16,1		    \n\t" /* (1) */
+	"	cp r12,r16		    \n\t" /* (1) */
+	"	brlo w6			    \n\t" /* (1/2) */
+	"	lds r16,(%[rx_buf]+%[local_packet_buf_size]-1)	\n\t" /* (2) */
+	"	st Z,r16		    \n\t" /* (2) */
+	"	rjmp w1			    \n\t" /* (2) */
+	"1:	ldi r16,2		    \n\t" /* (1) */
+	"	cp r11,r16		    \n\t" /* (1) */ /* Cleanup */
+	"	brne w5			    \n\t" /* (1/2) */
+	"	pop r31			    \n\t" /* (2) */
+	"	pop r30			    \n\t" /* (2) */
+	"	rjmp read		    \n\t" /* (2) */
+	"w6:	nop			    \n\t" /* (1) */
+	"w5:	nop			    \n\t" /* (1) */
+	"	nop			    \n\t" /* (1) */
+	"	nop			    \n\t" /* (1) */
+	"	nop			    \n\t" /* (1) */
+	"w1:	nop			    \n\t" /* (1) */
+	"read:	ldi r16,9		    \n\t"
+	"1:	dec r16			    \n\t" /* (27) */
+	"	brne 1b			    \n\t"
+	"	ldi r16,0		    \n\t" /* (1) */ /* Read input */
+      	"	sbis %[rx_port],%[rx_pin]   \n\t" /* (1/2/3) */
+	"	inc r16			    \n\t" /* (1) */
+      	"	sbis %[rx_port],%[rx_pin]   \n\t" /* (1/2/3) */
+	"	inc r16			    \n\t" /* (1) */
+      	"	sbis %[rx_port],%[rx_pin]   \n\t" /* (1/2/3) */
+	"	inc r16			    \n\t" /* (1) */
+	"	cpi r16,2		    \n\t" /* (1) */ /* Majority wins */
+      	"	brsh 1f			    \n\t" /* (1/2) */
+      	"	or r10,r13		    \n\t" /* (1) */ /* Received low */
+	"	nop			    \n\t" /* (1) */
+	"	rjmp 2f			    \n\t" /* (2) */
+      	"1:	mov r16,r13		    \n\t" /* (1) */ /* Received high */
+      	"	com r16			    \n\t" /* (1) */
+      	"	and r10,r16		    \n\t" /* (1) */
+      	"2:	lsl r13			    \n\t" /* (1) */
+      	"	inc r11			    \n\t" /* (1) */
+	"	ldi r16,8		    \n\t" /* (1) */
+      	"	cp r11,r16		    \n\t" /* (1) */
+      	"	brne rloop		    \n\t" /* (1/2) */
+      	"	sts (%[rx_buf]+%[local_packet_buf_size]-1),r10	\n\t" /* (2) */
+ 	"	mov r16,r10		    \n\t" /* (2) */ /* Check cur byte */
+      	"	cpi r16,%[packet_realtime]  \n\t" /* (1) */
+      	"	brsh rrltm		    \n\t" /* (1/2) */
+ 	"	lds r16,(%[rx_buf]+1)	    \n\t" /* (2) */ /* Check byte 1 */
+      	"	cpi r16,%[packet_header]    \n\t" /* (1) */
+      	"	breq rexit		    \n\t" /* (1/2) */
+	"	ldi r16,(%[local_packet_buf_size]-1)	\n\t" /* (1) */
+      	"	cp r12,r16		    \n\t" /* (1) */ /* Check byte n */
+      	"	brne rstop		    \n\t" /* (1/2) */
+	"	ldi r16,0		    \n\t" /* (1) */
+ 	"	sts %[p],r16		    \n\t" /* (2) */
+ 	"	mov r16,r10		    \n\t" /* (2) */
+      	"	cpi r16,%[packet_footer]    \n\t" /* (1) */
+      	"	brne rexit		    \n\t" /* (1/2) */
+      	"	ldi r16,%[packet_in_ready]  \n\t"	    /* Time is not */
+ 	"	sts %[packet_status],r16    \n\t"	    /* critical here */
+	"rintd:	ldi r16,%[rx_int_pin]	    \n\t"
+	"	mov r10,r16		    \n\t"
+	"	com r10			    \n\t"
+	"	lds r16,%[rx_int_msk_add]   \n\t"
+	"	and r16,r10		    \n\t"
+	"	sts %[rx_int_msk_add],r16   \n\t"	    /* Disable int */
+	"	rjmp rexit		    \n\t" /* (2) */
+	"rstop:	ldi r16,9		    \n\t"
+	"1:	dec r16			    \n\t" /* (27) */
+	"	brne 1b			    \n\t"
+	"	ldi r16,0		    \n\t" /* (1) */ /* Read stop */
+	"	sbis %[rx_port],%[rx_pin]   \n\t" /* (1/2/3) */
+	"	inc r16			    \n\t" /* (1) */
+	"	sbis %[rx_port],%[rx_pin]   \n\t" /* (1/2/3) */
+	"	inc r16			    \n\t" /* (1) */
+	"	sbis %[rx_port],%[rx_pin]   \n\t" /* (1/2/3) */
+	"	inc r16			    \n\t" /* (1) */
+	"	cpi r16,2		    \n\t" /* (1) */
+	"	brsh rexit		    \n\t" /* (1/2) */
+	"	inc r12			    \n\t" /* (1) */ /* Byte valid */
+	"	sts %[p],r12		    \n\t" /* (2) */
+	"rexit:	pop r16			    \n\t" /* (2) */ /* Epilogue */
+	"	out __SREG__,r16	    \n\t" /* (1) */
+        "	reti			    \n\t" /* (4) */
+      	"rrltm:	ldi r16,%[packet_rltm_ready]\n\t"	    /* Time is not */
+ 	"	sts %[packet_status],r16    \n\t"	    /* critical here */
+	"	rjmp rintd		    \n\t"
 	: /* No output, modifies rx_buffer */
-	: "p" (rx_buf), "m" (p), "m" (packet_status),
-	    "i" (RX_PORT), "i" (RX_PIN), "i" (LOCAL_PACKET_BUF_SIZE),
-	    "i" (PACKET_HEADER), "i" (PACKET_FOOTER),
-	    "i" (PACKET_IN_READY), "i" (RX_INT_MSK_ADD), "i" (RX_INT_PIN)
+	:   [rx_buf] "p" (rx_buf),
+	    [p] "m" (p),
+	    [packet_status] "m" (packet_status),
+	    [rx_port] "i" (RX_PORT),
+	    [rx_pin] "i" (RX_PIN),
+	    [local_packet_buf_size] "i" (LOCAL_PACKET_BUF_SIZE),
+	    [packet_header] "i" (PACKET_HEADER),
+	    [packet_footer] "i" (PACKET_FOOTER),
+	    [packet_realtime] "i" (PACKET_REALTIME),
+	    [packet_in_ready] "i" (PACKET_IN_READY),
+	    [packet_rltm_ready] "i" (PACKET_RLTM_READY),
+	    [rx_int_msk_add] "i" (RX_INT_MSK_ADD),
+	    [rx_int_pin] "i" (_BV(RX_INT_PIN))
 	:   "r10", /* Recieved byte */
 	    "r11", /* Bit counter */
 	    "r12", /* Byte counter */

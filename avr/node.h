@@ -16,34 +16,24 @@
  *	675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-/* Packets take the following form:
- *
- * Address  | Description    |  Example
- * --------------------------------------------------------------------------
- *     0 | One byte header:  |  0xff
- *     1 | Two byte address: |  hi8, lo8
- *     3 | One byte size:    |  n
- *     4 | n bytes of data:  |  d1, d2, ...
- * n + 4 | Two byte crc sum: |  hi8, lo8 - calculated from start of address, 
- *	 |		     |		    to end of data
- * n + 6 | One byte footer:  |  0xff
- *
- * Packet is rejected if header or footer is missing, address is wrong,
- * or if crc sum is bad.
- */
-
-#define PACKET_HEADER 0xff
-#define PACKET_FOOTER 0xff
+#define PACKET_HEADER 0xf0
+#define PACKET_FOOTER 0xf7
+#define PACKET_REALTIME 0xf8
 
 typedef enum {
 	PACKET_WAITING,
-	PACKET_IN_READY
+	PACKET_IN_READY,
+	PACKET_RLTM_READY
 } packet_status_t;
 
 extern volatile packet_status_t packet_status;
 
 extern unsigned char rx_buf[LOCAL_PACKET_BUF_SIZE];
 extern unsigned char tx_buf[LOCAL_PACKET_BUF_SIZE];
+
+static inline int realtime_byte(void) {
+	return rx_buf[LOCAL_PACKET_BUF_SIZE - 1];
+}
 
 extern char check_rx_packet(void);
 extern void pad_tx_packet(char local_address, unsigned char a_hi,

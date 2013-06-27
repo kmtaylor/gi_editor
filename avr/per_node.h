@@ -25,7 +25,7 @@
 #define EEPROM_BROKEN
 
 #ifdef CONTROL_NODE
-#define LOCAL_PACKET_BUF_SIZE	3
+#define LOCAL_PACKET_BUF_SIZE	10
 #define ADDRESS_HIGH		0x01
 #define ADDRESS_LOW		0x01
 #define ADC_DIVISOR		0x06 // Divide by 64
