@@ -54,7 +54,7 @@ static inline void setup_ports(void) {
 	DDRD = 0xF3;
 	PORTD = 0x00;
 	/* PB0-2 outputs, PB3/4 DI, PB5 shutdown PB6/7 XTAL */
-	DDRB = 0x27;
+	DDRB = 0x07;
 	PORTB = 0x38;
 }
 
@@ -84,14 +84,14 @@ static inline void start_timer1(void) {
 	TIMSK1 = 0x01;	// Enable overflow interrupt
 }
 
-//static volatile uint8_t *output_port[OUTPUT_CHANNELS] = {
-//	&PORTD, &PORTD, &PORTD, &PORTD,
-//	&PORTB, &PORTB, &PORTB, &PORTC
-//};
+static volatile uint8_t *output_port[OUTPUT_CHANNELS] = {
+	&PORTD, &PORTD, &PORTD, &PORTD,
+	&PORTB, &PORTB, &PORTB, &PORTC
+};
 
-//static const uint8_t output_address[OUTPUT_CHANNELS] = {
-//	PD4, PD5, PD6, PD7, PB0, PB1, PB2, PC0
-//};
+static const uint8_t output_address[OUTPUT_CHANNELS] = {
+	PD4, PD5, PD6, PD7, PB0, PB1, PB2, PC0
+};
 
 //static const uint8_t ainput_address[AINPUT_CHANNELS] = {
 //	0x06, 0x05, 0x04, 0x03, 0x02, 0x01, 0x07
@@ -115,14 +115,13 @@ int main (void) {
 	sei();
 	while (1) {
 	    if (packet_status == PACKET_IN_READY) {
-		PORTB ^= (1<<PB2);
 		memcpy(tx_buf, rx_buf, LOCAL_PACKET_BUF_SIZE);
 		send_packet();
+		*output_port[rx_buf[8]] ^= (1<<output_address[rx_buf[8]]);
 
 		receive_packet();
 	    }
 	    if (packet_status == PACKET_RLTM_READY) {
-		PORTB ^= (1<<PB2);
 
 		receive_packet();
 	    }

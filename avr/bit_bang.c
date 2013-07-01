@@ -40,7 +40,7 @@ void send_packet(void) {
 	"	ldi r30,lo8(%[tx_buf])	\n\t"
 	"	ldi r31,hi8(%[tx_buf])	\n\t"
 	"	mov r12,__zero_reg__	\n\t"
-	"tstrt: cbi %[tx_port],%[tx_pin]\n\t" /* (2) */	    /* Send start */
+	"tstrt: sbi %[tx_port],%[tx_pin]\n\t" /* (2) */	    /* Send start */
 	"	mov r11,__zero_reg__	\n\t" /* (1) */
 	"	mov r13,__zero_reg__	\n\t" /* (1) */
 	"	inc r13			\n\t" /* (1) */
@@ -58,9 +58,9 @@ void send_packet(void) {
 	"	and r16,r10		\n\t" /* (1) */
 	"	brne 1f			\n\t" /* (1/2) */
 	"	nop			\n\t" /* (1) */
-	"	cbi %[tx_port],%[tx_pin]\n\t" /* (2) */	    /* Send one */
+	"	sbi %[tx_port],%[tx_pin]\n\t" /* (2) */	    /* Send one */
 	"	rjmp 2f			\n\t" /* (2) */
-	"1:	sbi %[tx_port],%[tx_pin]\n\t" /* (2) */	    /* Send zero */
+	"1:	cbi %[tx_port],%[tx_pin]\n\t" /* (2) */	    /* Send zero */
 	"	nop			\n\t" /* (1) */
 	"	nop			\n\t" /* (1) */
 	"2:	nop			\n\t" /* (1) */
@@ -76,7 +76,7 @@ void send_packet(void) {
 	"	ldi r16,14		\n\t"
 	"1:	dec r16			\n\t" /* (42) */
 	"	brne 1b			\n\t"
-	"	sbi %[tx_port],%[tx_pin]\n\t" /* (2) */	    /* Send stop */
+	"	cbi %[tx_port],%[tx_pin]\n\t" /* (2) */	    /* Send stop */
 	"	ldi r16,17		\n\t"
 	"1:	dec r16			\n\t" /* (51) */
 	"	brne 1b			\n\t"
@@ -113,6 +113,7 @@ void send_packet(void) {
  * At the moment, it only handles Sysex messages with a fixed length (equal to
  * LOCAL_PACKET_BUF_SIZE 
  * Realtime messages also need to be caught here. */
+#if 1
 ISR(RX_INT_VECT, ISR_NAKED) {
 	static uint8_t p;
 	asm volatile (
@@ -250,3 +251,4 @@ ISR(RX_INT_VECT, ISR_NAKED) {
 	    "r30", "r31" /* Z pointer */
 	);
 }
+#endif
