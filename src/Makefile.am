@@ -18,7 +18,8 @@ translator_LDADD = $(top_srcdir)/libgieditor/libgieditor.la \
 translator_CFLAGS = $(JACK_CFLAGS)
 
 midi2jacksync_SOURCES = midi2jacksync.c
-midi2jacksync_LDADD = $(top_srcdir)/common/libcommon.la $(JACK_LIBS)
+midi2jacksync_LDADD = $(top_srcdir)/common/libcommon.la $(JACK_LIBS) \
+		      $(top_srcdir)/avr/libavr.la
 midi2jacksync_CFLAGS = $(JACK_CFLAGS)
 
 EXTRA_DIST = sysex_explorer.h korgnano.c

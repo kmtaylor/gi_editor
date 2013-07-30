@@ -46,11 +46,11 @@
 
 int sysex_init(const char *client_name, int timeout_time,
                 enum init_flags flags) {
-	jack_sysex_init(client_name, timeout_time, flags);
+	return jack_sysex_init(client_name, timeout_time, flags);
 }
 
 int sysex_close(void) {
-	jack_sysex_close();
+	return jack_sysex_close();
 }
 
 void sysex_set_timeout(int timeout_time) {

@@ -21,12 +21,10 @@
 
 extern int jack_sysex_init(const char *client_name, int timeout_time,
 		enum init_flags flags);
-
 extern int jack_sysex_close(void);
-
 extern void jack_sysex_set_timeout(int timeout_time);
-
 extern void jack_sysex_wait_write(void);
+
 extern void jack_flush_sysex_in_list(void);
-extern int jack_sysex_listen_event();
+extern int jack_sysex_listen_event(uint8_t **data);
 extern void jack_sysex_send_event(uint32_t sysex_size, uint8_t *data);

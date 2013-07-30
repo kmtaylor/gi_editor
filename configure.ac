@@ -12,6 +12,7 @@ AC_CONFIG_HEADERS([config/config.h])
 AC_CONFIG_FILES([
     Makefile
     include/Makefile
+    avr/Makefile
     common/Makefile
     manual_parse/Makefile
     libgieditor/Makefile

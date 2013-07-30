@@ -18,6 +18,7 @@
 
 #include <stdint.h>
 
+#define CONTROL_NODE
 #include "per_node.h"
 #include "node.h"
 

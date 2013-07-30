@@ -29,7 +29,11 @@
 #include <jack/jack.h>
 #include <jack/midiport.h>
 
+#include "libgieditor.h"
+#include "avr_api.h"
+
 #define CLIENT_NAME "JackSyncer"
+#define CLIENT_CONTROLLER_NAME "JackSyncerAVR"
 
 #define JITTER_TOLERANCE 30
 
@@ -260,6 +264,7 @@ static int jack_close(void) {
 }
 
 static void signal_handler(int unused) {
+	avr_api_close();
 	jack_close();
 	exit(0);
 }
@@ -304,7 +309,7 @@ static int process_read_data(void) {
 	    }
 
 	    KORG_BACK_BUTTON_PRESSED(cur_midictl) {
-		//avr_toggle_back();
+		avr_toggle_back();
 	    }
 
 	    KORG_FORWARD_BUTTON_PRESSED(cur_midictl) {
@@ -349,6 +354,11 @@ int main(int argc, char **argv) {
 	    printf("Midi clock tempo: %ibpm\n", tempo);
 	}
 
+	if (avr_api_init(CLIENT_CONTROLLER_NAME,
+				LIBGIEDITOR_READ | LIBGIEDITOR_WRITE) < 0 ) {
+	    printf("Couldn't initialise avr interface.\n");
+	    exit(1);
+	}
 	if (jack_init(CLIENT_NAME) < 0) {
 	    printf("Couldn't initialise jack client.\n"
 		    "Check that jackd is running and there is no existing "
