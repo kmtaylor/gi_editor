@@ -86,11 +86,11 @@ static inline void start_timer1(void) {
 
 static volatile uint8_t *output_port[OUTPUT_CHANNELS] = {
 	&PORTD, &PORTD, &PORTD, &PORTD,
-	&PORTB, &PORTB, &PORTB, &PORTC
+	&PORTB, &PORTB, &PORTB
 };
 
 static const uint8_t output_address[OUTPUT_CHANNELS] = {
-	PD4, PD5, PD6, PD7, PB0, PB1, PB2, PC0
+	PD4, PD5, PD6, PD7, PB0, PB1, PB2
 };
 
 //static const uint8_t ainput_address[AINPUT_CHANNELS] = {
@@ -105,6 +105,20 @@ static const uint8_t output_address[OUTPUT_CHANNELS] = {
 //	PB3, PB4
 //};
 
+static void process_command(uint8_t *command) {
+	switch (command[0]) {
+	    case TOGGLE_BUTTON :
+		*output_port[command[1]] |=  _BV(output_address[command[1]]);
+		busy_wait();
+		*output_port[command[1]] &= ~_BV(output_address[command[1]]);
+		break;
+	    case DELTA_MEASURE :
+		break;
+	    case GET_VIEW :
+		break;
+	}
+}
+
 int main (void) {
 	setup_ports();
 	setup_adc();
@@ -115,9 +129,8 @@ int main (void) {
 	sei();
 	while (1) {
 	    if (packet_status == PACKET_IN_READY) {
-		memcpy(tx_buf, rx_buf, LOCAL_PACKET_BUF_SIZE);
-		send_packet();
-		*output_port[rx_buf[8]] ^= (1<<output_address[rx_buf[8]]);
+		if (check_rx_packet())
+			process_command(&rx_buf[PACKET_DATA_OFFSET]);
 
 		receive_packet();
 	    }

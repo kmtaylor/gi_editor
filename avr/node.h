@@ -19,6 +19,12 @@
 #define PACKET_HEADER 0xf0
 #define PACKET_FOOTER 0xf7
 #define PACKET_REALTIME 0xf8
+#define PACKET_DATA_OFFSET 4
+
+static inline void busy_wait(void) {
+	volatile int i = 10000;
+	while (i) i--;
+}
 
 typedef enum {
 	PACKET_WAITING,
@@ -36,7 +42,6 @@ static inline int realtime_byte(void) {
 }
 
 extern char check_rx_packet(void);
-extern void pad_tx_packet(char local_address, unsigned char a_hi,
-					unsigned char a_lo);
+extern void pad_tx_packet(void);
 extern void set_address(unsigned char a_hi, unsigned char a_lo);
 extern void init_node(void);

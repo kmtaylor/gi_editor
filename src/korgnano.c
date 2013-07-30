@@ -29,8 +29,16 @@ static void korg_update_leds(enum e_status cur_status) {
 }
 
 #define KORG_START_BUTTON_PRESSED(cur_midictl)	\
-	if (cur_midictl->control == 0x2B && cur_midictl->value == 0x7F)
+	if (cur_midictl->control == 0x2E && cur_midictl->value == 0x7F)
 #define KORG_REC_BUTTON_PRESSED(cur_midictl)	\
 	if (cur_midictl->control == 0x2D && cur_midictl->value == 0x7F)
+#define KORG_PLAY_BUTTON_PRESSED(cur_midictl)	\
+	if (cur_midictl->control == 0x29 && cur_midictl->value == 0x7F)
+#define KORG_STOP_BUTTON_PRESSED(cur_midictl)	\
+	if (cur_midictl->control == 0x2A && cur_midictl->value == 0x7F)
+#define KORG_BACK_BUTTON_PRESSED(cur_midictl)	\
+	if (cur_midictl->control == 0x2B && cur_midictl->value == 0x7F)
+#define KORG_FORWARD_BUTTON_PRESSED(cur_midictl)	\
+	if (cur_midictl->control == 0x2C && cur_midictl->value == 0x7F)
 
 #endif

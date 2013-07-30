@@ -213,7 +213,7 @@ static int jack_init(const char *client_name) {
 			JACK_DEFAULT_MIDI_TYPE,
 			JackPortIsOutput | JackPortIsTerminal, 0);
 	
-	if (!(midi_in_port || midi_led_port)) return -1;
+	if (!(midi_in_port && midi_led_port)) return -1;
 	
 	jack_set_process_callback(jack_client, process_callback, 0);
 
@@ -276,18 +276,6 @@ static int process_read_data(void) {
 	    transport_change = old_transport_status != transport_status;
         }
 
-	if (transport_change) {
-	    if (transport_status & TRANSPORT_RUNNING) {
-		jack_transport_start(jack_client);
-		midi_clock_counting = 1;
-	    }
-	    else {
-		jack_transport_stop(jack_client);
-		midi_clock_counting = 0;
-		transport_status &= ~TRANSPORT_RECORDING;
-	    }
-	}
-
 	if (midictl_in_list) {
 	    cur_midictl = midictl_in_list;
 	    midictl_in_list = midictl_in_list->next;
@@ -307,11 +295,36 @@ static int process_read_data(void) {
 			( transport_status |=  TRANSPORT_RECORDING );
 	    }
 
+	    KORG_PLAY_BUTTON_PRESSED(cur_midictl) {
+		transport_status |= TRANSPORT_RUNNING;
+	    }
+
+	    KORG_STOP_BUTTON_PRESSED(cur_midictl) {
+		transport_status &= ~TRANSPORT_RUNNING;
+	    }
+
+	    KORG_BACK_BUTTON_PRESSED(cur_midictl) {
+	    }
+
+	    KORG_FORWARD_BUTTON_PRESSED(cur_midictl) {
+	    }
+
 	    free(cur_midictl);
 	}
 
-	if (transport_change)
+	if (transport_change) {
+	    if (transport_status & TRANSPORT_RUNNING) {
+		jack_transport_start(jack_client);
+		midi_clock_counting = 1;
+	    }
+	    else {
+		jack_transport_stop(jack_client);
+		midi_clock_counting = 0;
+		transport_status &= ~TRANSPORT_RECORDING;
+	    }
 	    update_leds();
+	    //update_controller();
+	}
 
 	old_transport_status = transport_status;
 

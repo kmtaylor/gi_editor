@@ -159,7 +159,7 @@ static int jack_init(const char *client_name) {
 			JACK_DEFAULT_MIDI_TYPE,
 			JackPortIsOutput | JackPortIsTerminal, 0);
 	
-	if (!(midi_in_port || midi_led_port || midi_ctl_port)) return -1;
+	if (!(midi_in_port && midi_led_port && midi_ctl_port)) return -1;
 	
 	jack_set_process_callback(jack_client, jack_callback, 0);
 

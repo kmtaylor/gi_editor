@@ -34,7 +34,26 @@
 #define TX_ENABLE		PORTD |= (1<<PD1)
 #define TX_DISABLE		PORTD &= ~(1<<PD1)
 #define BIT_BANG		1
+#define MIDI_MANU_ID		0x7D
+#define MIDI_DEV_ID		1
+#define MIDI_NODE_ID		1
 #endif
+
+enum {
+	TOGGLE_BUTTON,
+	DELTA_MEASURE,
+	GET_VIEW
+};
+
+enum {
+	INC_BUTTON,
+	VIEW_BUTTON,
+	DEC_BUTTON,
+	STOP_BUTTON,
+	RESTART_BUTTON,
+	RECORD_BUTTON,
+	PLAY_BUTTON
+};
 
 /* Put this here for want of a better place */
 static inline uint8_t take_sample(const uint8_t channel) {
