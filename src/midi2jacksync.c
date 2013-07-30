@@ -47,7 +47,7 @@
     buf[VALUE_OFFSET] = value
 
 extern void *__common_allocate(size_t size, char *func_name);
-#define allocate(t, num) __common_allocate(sizeof(t) * num, "translator")
+#define allocate(t, num) __common_allocate(sizeof(t) * num, "midi2jacksync")
 
 typedef struct s_midictl_list *Midictl_list;
 struct s_midictl_list {
@@ -304,11 +304,11 @@ static int process_read_data(void) {
 	    }
 
 	    KORG_BACK_BUTTON_PRESSED(cur_midictl) {
-		avr_toggle_back();
+		//avr_toggle_back();
 	    }
 
 	    KORG_FORWARD_BUTTON_PRESSED(cur_midictl) {
-		avr_toggle_forward();
+		//avr_toggle_forward();
 	    }
 
 	    free(cur_midictl);
