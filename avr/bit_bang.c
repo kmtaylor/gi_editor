@@ -22,7 +22,6 @@
 	"	brne lb			\n\t"
 */
 
-#include <avr/io.h>
 #include <avr/interrupt.h>
 #include <avr/power.h>
 
@@ -113,7 +112,6 @@ void send_packet(void) {
  * At the moment, it only handles Sysex messages with a fixed length (equal to
  * LOCAL_PACKET_BUF_SIZE 
  * Realtime messages also need to be caught here. */
-#if 1
 ISR(RX_INT_VECT, ISR_NAKED) {
 	static uint8_t p;
 	asm volatile (
@@ -251,4 +249,3 @@ ISR(RX_INT_VECT, ISR_NAKED) {
 	    "r30", "r31" /* Z pointer */
 	);
 }
-#endif

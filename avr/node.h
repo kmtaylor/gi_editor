@@ -43,5 +43,4 @@ static inline int realtime_byte(void) {
 
 extern char check_rx_packet(void);
 extern void pad_tx_packet(void);
-extern void set_address(unsigned char a_hi, unsigned char a_lo);
-extern void init_node(void);
+extern uint8_t checksum(uint8_t len, uint8_t *data);
