@@ -142,6 +142,11 @@ static void process_command(uint8_t *command) {
 	}
 }
 
+static void process_realtime(uint8_t val) {
+	if (val == MIDI_RLTM_CONT) toggle_output(PLAY_BUTTON, 0);
+	if (val == MIDI_RLTM_STOP) toggle_output(STOP_BUTTON, 0);
+}
+
 int main (void) {
 	setup_ports();
 	setup_power();
@@ -155,6 +160,7 @@ int main (void) {
 		receive_packet();
 	    }
 	    if (packet_status == PACKET_RLTM_READY) {
+		process_realtime(rx_buf[AVR_SYSEX_BUF_SIZE - 1]);
 
 		receive_packet();
 	    }

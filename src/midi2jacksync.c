@@ -286,6 +286,7 @@ static int process_read_data(void) {
 	    midictl_in_list = midictl_in_list->next;
 
 	    KORG_START_BUTTON_PRESSED(cur_midictl) {
+		    printf("start button\n");
 		jack_transport_locate(jack_client, 0);
 		if (transport_status & TRANSPORT_RECORDING) {
 		    transport_status &= ~TRANSPORT_RECORDING;
@@ -294,6 +295,7 @@ static int process_read_data(void) {
 	    }
 
 	    KORG_REC_BUTTON_PRESSED(cur_midictl) {
+		    printf("rec button\n");
 		transport_change = 1;
 		(transport_status & TRANSPORT_RECORDING) ?
 			( transport_status &= ~TRANSPORT_RECORDING ) :
@@ -301,11 +303,15 @@ static int process_read_data(void) {
 	    }
 
 	    KORG_PLAY_BUTTON_PRESSED(cur_midictl) {
+		    printf("play button\n");
 		transport_status |= TRANSPORT_RUNNING;
+		transport_change = 1;
 	    }
 
 	    KORG_STOP_BUTTON_PRESSED(cur_midictl) {
+		    printf("stop button\n");
 		transport_status &= ~TRANSPORT_RUNNING;
+		transport_change = 1;
 	    }
 
 	    KORG_BACK_BUTTON_PRESSED(cur_midictl) {
@@ -323,8 +329,7 @@ static int process_read_data(void) {
 	    if (transport_status & TRANSPORT_RUNNING) {
 		jack_transport_start(jack_client);
 		midi_clock_counting = 1;
-	    }
-	    else {
+	    } else {
 		jack_transport_stop(jack_client);
 		midi_clock_counting = 0;
 		transport_status &= ~TRANSPORT_RECORDING;

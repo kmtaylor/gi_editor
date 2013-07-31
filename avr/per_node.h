@@ -32,6 +32,8 @@
 #define MIDI_DEV_ID		1
 #define MIDI_NODE_ID		1
 #define MIDI_CONTROL_CHANNEL	0xB1
+#define MIDI_RLTM_CONT		0xFB
+#define MIDI_RLTM_STOP		0xFC
 #endif
 
 enum {
