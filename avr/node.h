@@ -22,7 +22,7 @@
 #define PACKET_DATA_OFFSET 4
 
 static inline void busy_wait(void) {
-	volatile int i = 10000;
+	volatile int i = 6000;
 	while (i) i--;
 }
 

@@ -31,3 +31,5 @@ extern void avr_toggle_stop(void);
 extern void avr_toggle_restart(void);
 extern void avr_toggle_rec(void);
 extern void avr_toggle_view(void);
+
+extern void avr_delta_measure(int16_t val);

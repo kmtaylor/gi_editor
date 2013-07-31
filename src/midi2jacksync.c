@@ -42,6 +42,7 @@
 #define MIDI_CLOCK_TICK	    0xF8
 #define MIDI_CTL_MSG	    0xB0
 #define MIDI_CTL_CHANNEL    0
+#define MIDI_AVR_CHANNEL    1
 #define MIDI_CTL_SIZE	    3
 #define CONTROL_OFFSET	    1
 #define VALUE_OFFSET	    2
@@ -308,11 +309,11 @@ static int process_read_data(void) {
 	    }
 
 	    KORG_BACK_BUTTON_PRESSED(cur_midictl) {
-		avr_toggle_dec();
+		avr_delta_measure(-30);
 	    }
 
 	    KORG_FORWARD_BUTTON_PRESSED(cur_midictl) {
-		avr_toggle_inc();
+		avr_delta_measure(10);
 	    }
 
 	    free(cur_midictl);

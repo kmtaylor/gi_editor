@@ -78,7 +78,7 @@ ISR(PCINT0_vect) {
 
 static void transmit_view(void) {
 	struct control_change *cmd = (struct control_change *) tx_buf;
-	cmd->change_cmd = 0xB0;
+	cmd->change_cmd = MIDI_CONTROL_CHANNEL;
 	cmd->channel = 0;
 
 	PCMSK0 |=  _BV(PCINT3);
@@ -94,15 +94,47 @@ static void transmit_view(void) {
 	view_set = 0;
 }
 
+static void toggle_output(uint8_t channel, uint8_t wait) {
+	*output_port[channel] |=  _BV(output_address[channel]);
+	busy_wait();
+	*output_port[channel] &= ~_BV(output_address[channel]);
+	if (wait) busy_wait();
+}
+
+static void delta_measure(uint8_t *val_bytes) {
+	int16_t val = 0, i;
+	val |= val_bytes[3] << 0;
+	val |= val_bytes[2] << 4;
+	val |= val_bytes[1] << 8;
+	val |= val_bytes[0] << 12;
+
+	if (val == 0) return;
+
+	PCMSK0 |=  _BV(PCINT3);
+        busy_wait();
+        PCMSK0 &= ~_BV(PCINT3);
+
+	if (!view_set) toggle_output(VIEW_BUTTON, 0);
+
+	if (val > 0) {
+	    for (i = 0; i < val; i++) toggle_output(INC_BUTTON, 1);
+	} else {
+	    val = -val;
+	    for (i = 0; i < val; i++) toggle_output(DEC_BUTTON, 1);
+	}
+
+	if (!view_set) toggle_output(VIEW_BUTTON, 0);
+	view_set = 0;
+}
+
 static void process_command(uint8_t *command) {
 	switch (command[0]) {
 	    case TOGGLE_BUTTON :
 		if (command[1] >= OUTPUT_CHANNELS) break;
-		*output_port[command[1]] |=  _BV(output_address[command[1]]);
-		busy_wait();
-		*output_port[command[1]] &= ~_BV(output_address[command[1]]);
+		toggle_output(command[1], 0);
 		break;
 	    case DELTA_MEASURE :
+		delta_measure(&command[1]);
 		break;
 	    case GET_VIEW :
 		transmit_view();

@@ -21,7 +21,7 @@
  * turns on the BOD, at 7.3728MHz */
 
 #ifdef CONTROL_NODE
-#define AVR_SYSEX_BUF_SIZE	10
+#define AVR_SYSEX_BUF_SIZE	11
 #define AVR_TX_BUF_SIZE		3
 #define CLOCK_DIVISOR		clock_div_4
 /* Node specific EIA-485 control signals */
@@ -31,6 +31,7 @@
 #define MIDI_MANU_ID		0x7D
 #define MIDI_DEV_ID		1
 #define MIDI_NODE_ID		1
+#define MIDI_CONTROL_CHANNEL	0xB1
 #endif
 
 enum {

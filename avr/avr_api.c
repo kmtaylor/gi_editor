@@ -47,7 +47,17 @@ void avr_api_wait_write(void) {
 struct __attribute__((packed)) avr_cmd {
 	uint8_t cmd;
 	uint8_t byte1;
+	uint8_t byte2;
+	uint8_t byte3;
+	uint8_t byte4;
 };
+
+static void set_arg_16(struct avr_cmd *cmd, uint16_t val) {
+	cmd->byte4 = (val >>  0) & 0xf;
+	cmd->byte3 = (val >>  4) & 0xf;
+	cmd->byte2 = (val >>  8) & 0xf;
+	cmd->byte1 = (val >> 12) & 0xf;
+}
 
 void avr_toggle_dec(void) {
 	struct avr_cmd *cmd = (struct avr_cmd *) (tx_buf + PACKET_DATA_OFFSET);
@@ -101,6 +111,21 @@ void avr_toggle_view(void) {
 	struct avr_cmd *cmd = (struct avr_cmd *) (tx_buf + PACKET_DATA_OFFSET);
 	cmd->cmd = TOGGLE_BUTTON;
 	cmd->byte1 = VIEW_BUTTON;
+	pad_tx_packet();
+	jack_sysex_send_event(AVR_SYSEX_BUF_SIZE, tx_buf);
+}
+
+void avr_req_view(void) {
+	struct avr_cmd *cmd = (struct avr_cmd *) (tx_buf + PACKET_DATA_OFFSET);
+	cmd->cmd = GET_VIEW;
+	pad_tx_packet();
+	jack_sysex_send_event(AVR_SYSEX_BUF_SIZE, tx_buf);
+}
+
+void avr_delta_measure(int16_t val) {
+	struct avr_cmd *cmd = (struct avr_cmd *) (tx_buf + PACKET_DATA_OFFSET);
+	cmd->cmd = DELTA_MEASURE;
+	set_arg_16(cmd, (uint16_t) val);
 	pad_tx_packet();
 	jack_sysex_send_event(AVR_SYSEX_BUF_SIZE, tx_buf);
 }
