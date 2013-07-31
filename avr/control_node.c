@@ -24,7 +24,9 @@
 #include "bit_bang.h"
 
 #define OUTPUT_CHANNELS 7
-#define DINPUT_CHANNELS 2
+#define DINPUT_CHANNELS 3
+
+static volatile char view_set;
 
 static inline void setup_ports(void) {
 	/* Port C is unused */
@@ -32,10 +34,12 @@ static inline void setup_ports(void) {
 	PORTC = 0x00;
 	/* PD3 is DTR shutdown, PD0/2 are UART(TX/RX), PD1 is uart enable */
 	DDRD = 0xF3;
-	PORTD = 0x00;
-	/* PB0-2 outputs, PB3/4 DI, PB5 shutdown PB6/7 XTAL */
+	PORTD = 0x08;
+	/* PB0-2 outputs, PB3-5 DI, PB6/7 XTAL */
 	DDRB = 0x07;
 	PORTB = 0x38;
+	/* Interrupt on PB3 for debounce */
+	PCICR |= _BV(PCIE0);
 }
 
 static inline void setup_power(void) {
@@ -55,16 +59,45 @@ static const uint8_t output_address[OUTPUT_CHANNELS] = {
 };
 
 //static volatile uint8_t *dinput_port[DINPUT_CHANNELS] = {
-//	&PINB, &PINB
+//	&PINB, &PINB, &PINB
 //};
 
 //static const uint8_t dinput_address[DINPUT_CHANNELS] = {
-//	PB3, PB4
+//	PB3, PB4, PB5
 //};
+
+struct __attribute__((packed)) control_change {
+	uint8_t change_cmd;
+	uint8_t channel;
+	uint8_t val;
+};
+
+ISR(PCINT0_vect) {
+	view_set = 1;
+}
+
+static void transmit_view(void) {
+	struct control_change *cmd = (struct control_change *) tx_buf;
+	cmd->change_cmd = 0xB0;
+	cmd->channel = 0;
+
+	PCMSK0 |=  _BV(PCINT3);
+	busy_wait();
+	PCMSK0 &= ~_BV(PCINT3);
+
+	if (view_set) {
+		cmd->val = 0x7F;
+	} else {
+		cmd->val = 0x00;
+	}
+	send_packet();
+	view_set = 0;
+}
 
 static void process_command(uint8_t *command) {
 	switch (command[0]) {
 	    case TOGGLE_BUTTON :
+		if (command[1] >= OUTPUT_CHANNELS) break;
 		*output_port[command[1]] |=  _BV(output_address[command[1]]);
 		busy_wait();
 		*output_port[command[1]] &= ~_BV(output_address[command[1]]);
@@ -72,6 +105,7 @@ static void process_command(uint8_t *command) {
 	    case DELTA_MEASURE :
 		break;
 	    case GET_VIEW :
+		transmit_view();
 		break;
 	}
 }

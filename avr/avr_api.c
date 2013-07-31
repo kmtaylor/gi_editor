@@ -49,10 +49,58 @@ struct __attribute__((packed)) avr_cmd {
 	uint8_t byte1;
 };
 
-void avr_toggle_back(void) {
-	struct avr_cmd *cmd = (struct avr_cmd *) tx_buf + PACKET_DATA_OFFSET;
+void avr_toggle_dec(void) {
+	struct avr_cmd *cmd = (struct avr_cmd *) (tx_buf + PACKET_DATA_OFFSET);
 	cmd->cmd = TOGGLE_BUTTON;
 	cmd->byte1 = DEC_BUTTON;
 	pad_tx_packet();
-	jack_sysex_send_event(LOCAL_PACKET_BUF_SIZE, tx_buf);
+	jack_sysex_send_event(AVR_SYSEX_BUF_SIZE, tx_buf);
+}
+
+void avr_toggle_inc(void) {
+	struct avr_cmd *cmd = (struct avr_cmd *) (tx_buf + PACKET_DATA_OFFSET);
+	cmd->cmd = TOGGLE_BUTTON;
+	cmd->byte1 = INC_BUTTON;
+	pad_tx_packet();
+	jack_sysex_send_event(AVR_SYSEX_BUF_SIZE, tx_buf);
+}
+
+void avr_toggle_play(void) {
+	struct avr_cmd *cmd = (struct avr_cmd *) (tx_buf + PACKET_DATA_OFFSET);
+	cmd->cmd = TOGGLE_BUTTON;
+	cmd->byte1 = PLAY_BUTTON;
+	pad_tx_packet();
+	jack_sysex_send_event(AVR_SYSEX_BUF_SIZE, tx_buf);
+}
+
+void avr_toggle_stop(void) {
+	struct avr_cmd *cmd = (struct avr_cmd *) (tx_buf + PACKET_DATA_OFFSET);
+	cmd->cmd = TOGGLE_BUTTON;
+	cmd->byte1 = STOP_BUTTON;
+	pad_tx_packet();
+	jack_sysex_send_event(AVR_SYSEX_BUF_SIZE, tx_buf);
+}
+
+void avr_toggle_restart(void) {
+	struct avr_cmd *cmd = (struct avr_cmd *) (tx_buf + PACKET_DATA_OFFSET);
+	cmd->cmd = TOGGLE_BUTTON;
+	cmd->byte1 = RESTART_BUTTON;
+	pad_tx_packet();
+	jack_sysex_send_event(AVR_SYSEX_BUF_SIZE, tx_buf);
+}
+
+void avr_toggle_rec(void) {
+	struct avr_cmd *cmd = (struct avr_cmd *) (tx_buf + PACKET_DATA_OFFSET);
+	cmd->cmd = TOGGLE_BUTTON;
+	cmd->byte1 = RECORD_BUTTON;
+	pad_tx_packet();
+	jack_sysex_send_event(AVR_SYSEX_BUF_SIZE, tx_buf);
+}
+
+void avr_toggle_view(void) {
+	struct avr_cmd *cmd = (struct avr_cmd *) (tx_buf + PACKET_DATA_OFFSET);
+	cmd->cmd = TOGGLE_BUTTON;
+	cmd->byte1 = VIEW_BUTTON;
+	pad_tx_packet();
+	jack_sysex_send_event(AVR_SYSEX_BUF_SIZE, tx_buf);
 }

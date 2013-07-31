@@ -21,7 +21,8 @@
  * turns on the BOD, at 7.3728MHz */
 
 #ifdef CONTROL_NODE
-#define LOCAL_PACKET_BUF_SIZE	10
+#define AVR_SYSEX_BUF_SIZE	10
+#define AVR_TX_BUF_SIZE		3
 #define CLOCK_DIVISOR		clock_div_4
 /* Node specific EIA-485 control signals */
 #define TX_ENABLE		PORTD |= (1<<PD1)
@@ -46,4 +47,8 @@ enum {
 	RESTART_BUTTON,
 	RECORD_BUTTON,
 	PLAY_BUTTON
+};
+
+enum {
+	VIEW_INPUT
 };

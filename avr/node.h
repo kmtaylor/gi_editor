@@ -34,11 +34,11 @@ typedef enum {
 
 extern volatile packet_status_t packet_status;
 
-extern unsigned char rx_buf[LOCAL_PACKET_BUF_SIZE];
-extern unsigned char tx_buf[LOCAL_PACKET_BUF_SIZE];
+extern unsigned char rx_buf[AVR_SYSEX_BUF_SIZE];
+extern unsigned char tx_buf[AVR_SYSEX_BUF_SIZE];
 
 static inline int realtime_byte(void) {
-	return rx_buf[LOCAL_PACKET_BUF_SIZE - 1];
+	return rx_buf[AVR_SYSEX_BUF_SIZE - 1];
 }
 
 extern char check_rx_packet(void);

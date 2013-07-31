@@ -89,7 +89,7 @@ void send_packet(void) {
 	:   [tx_buf] "p" (tx_buf),
 	    [tx_port] "i" (TX_PORT),
 	    [tx_pin] "i" (TX_PIN),
-	    [local_packet_buf_size] "i" (LOCAL_PACKET_BUF_SIZE)
+	    [local_packet_buf_size] "i" (AVR_TX_BUF_SIZE)
 	:   "r10", /* Byte sent */
 	    "r11", /* Bit counter */
 	    "r12", /* Byte counter */
@@ -110,7 +110,7 @@ void send_packet(void) {
  * as global except the pointer registers r30 and r31 these are saved and
  * restored when appropriate
  * At the moment, it only handles Sysex messages with a fixed length (equal to
- * LOCAL_PACKET_BUF_SIZE 
+ * AVR_SYSEX_BUF_SIZE 
  * Realtime messages also need to be caught here. */
 ISR(RX_INT_VECT, ISR_NAKED) {
 	static uint8_t p;
@@ -233,7 +233,7 @@ ISR(RX_INT_VECT, ISR_NAKED) {
 	    [packet_status] "m" (packet_status),
 	    [rx_port] "i" (RX_PORT),
 	    [rx_pin] "i" (RX_PIN),
-	    [local_packet_buf_size] "i" (LOCAL_PACKET_BUF_SIZE),
+	    [local_packet_buf_size] "i" (AVR_SYSEX_BUF_SIZE),
 	    [packet_header] "i" (PACKET_HEADER),
 	    [packet_footer] "i" (PACKET_FOOTER),
 	    [packet_realtime] "i" (PACKET_REALTIME),

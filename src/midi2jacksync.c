@@ -308,11 +308,11 @@ static int process_read_data(void) {
 	    }
 
 	    KORG_BACK_BUTTON_PRESSED(cur_midictl) {
-		avr_toggle_back();
+		avr_toggle_dec();
 	    }
 
 	    KORG_FORWARD_BUTTON_PRESSED(cur_midictl) {
-		//avr_toggle_forward();
+		avr_toggle_inc();
 	    }
 
 	    free(cur_midictl);
@@ -329,7 +329,6 @@ static int process_read_data(void) {
 		transport_status &= ~TRANSPORT_RECORDING;
 	    }
 	    update_leds();
-	    //update_controller();
 	}
 
 	old_transport_status = transport_status;

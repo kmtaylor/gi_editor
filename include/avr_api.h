@@ -24,4 +24,10 @@ extern int avr_sysex_close(void);
 extern void avr_sysex_set_timeout(int timeout_time);
 extern void avr_sysex_wait_write(void);
 
-extern void avr_toggle_back(void);
+extern void avr_toggle_dec(void);
+extern void avr_toggle_inc(void);
+extern void avr_toggle_play(void);
+extern void avr_toggle_stop(void);
+extern void avr_toggle_restart(void);
+extern void avr_toggle_rec(void);
+extern void avr_toggle_view(void);
