@@ -38,8 +38,8 @@ extern volatile packet_status_t packet_status;
 extern unsigned char rx_buf[AVR_SYSEX_BUF_SIZE];
 extern unsigned char tx_buf[AVR_SYSEX_BUF_SIZE];
 
-static inline int realtime_byte(void) {
-	return rx_buf[AVR_SYSEX_BUF_SIZE - 1];
+static inline uint8_t realtime_byte(void) {
+	return rx_buf[PACKET_RLTM_OFFSET];
 }
 
 extern char check_rx_packet(void);

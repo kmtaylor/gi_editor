@@ -160,7 +160,7 @@ int main (void) {
 		receive_packet();
 	    }
 	    if (packet_status == PACKET_RLTM_READY) {
-		process_realtime(rx_buf[PACKET_RLTM_OFFSET]);
+		process_realtime(realtime_byte());
 
 		receive_packet();
 	    }
