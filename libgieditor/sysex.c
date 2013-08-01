@@ -180,6 +180,7 @@ int sysex_recv(uint8_t dev_id, uint32_t model_id,
 	buf[i++] = MIDI_CMD_COMMON_SYSEX_END;
 
 	jack_sysex_send_event(i, buf);
+	jack_flush_sysex_in_list();
 
 	bytes_received = sysex_listen_event(&cmd_id, &sysex_addr, data, &sum);
 
