@@ -20,6 +20,7 @@
 #define PACKET_FOOTER 0xf7
 #define PACKET_REALTIME 0xf8
 #define PACKET_DATA_OFFSET 4
+#define PACKET_RLTM_OFFSET AVR_SYSEX_BUF_SIZE - 1
 
 static inline void busy_wait(void) {
 	volatile int i = 6000;
