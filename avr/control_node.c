@@ -155,12 +155,13 @@ int main (void) {
 	while (1) {
 	    if (packet_status == PACKET_IN_READY) {
 		if (check_rx_packet())
-			process_command(&rx_buf[PACKET_DATA_OFFSET]);
+		    process_command(&rx_buf[PACKET_DATA_OFFSET]);
 
 		receive_packet();
 	    }
 	    if (packet_status == PACKET_RLTM_READY) {
-		process_realtime(realtime_byte());
+		if (check_rltm())
+		    process_realtime(realtime_byte());
 
 		receive_packet();
 	    }

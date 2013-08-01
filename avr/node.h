@@ -19,6 +19,7 @@
 #define PACKET_HEADER 0xf0
 #define PACKET_FOOTER 0xf7
 #define PACKET_REALTIME 0xf8
+#define PACKET_NOT_SYSEX 0x80
 #define PACKET_DATA_OFFSET 4
 #define PACKET_RLTM_OFFSET AVR_SYSEX_BUF_SIZE - 1
 
@@ -40,6 +41,10 @@ extern unsigned char tx_buf[AVR_SYSEX_BUF_SIZE];
 
 static inline uint8_t realtime_byte(void) {
 	return rx_buf[PACKET_RLTM_OFFSET];
+}
+
+static inline uint8_t check_rltm(void) {
+	return (realtime_byte() >= PACKET_REALTIME);
 }
 
 extern char check_rx_packet(void);

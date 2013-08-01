@@ -50,6 +50,8 @@
     buf[0] = MIDI_CTL_MSG | MIDI_CTL_CHANNEL;				    \
     buf[CONTROL_OFFSET] = control;					    \
     buf[VALUE_OFFSET] = value
+#define RLTM_TO_BUFFER(buf, byte) \
+    buf[0] = byte
 
 #define allocate(t, num) __common_allocate(sizeof(t) * num, "midi2jacksync")
 
@@ -60,12 +62,19 @@ struct s_midictl_list {
 	Midictl_list	next;
 };
 
+typedef struct s_midi_rltm_list *Midi_rltm_list;
+struct s_midi_rltm_list {
+	uint8_t		byte;
+	Midi_rltm_list	next;
+};
+
 static int tempo;
 static int do_sync;
 
 /* Only access with midi_lock */
 static Midictl_list midictl_in_list;
 static Midictl_list midictl_led_list;
+static Midi_rltm_list midi_rltm_list;
 static int midi_clock_counting;
 static unsigned long midi_clock_count;
 enum e_status {
@@ -77,7 +86,7 @@ static enum e_status transport_status;
 
 static jack_client_t *jack_client;
 static jack_port_t *midi_in_port;
-static jack_port_t *midi_led_port;
+static jack_port_t *midi_out_port;
 
 static pthread_mutex_t midi_lock = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t read_data_ready = PTHREAD_COND_INITIALIZER;
@@ -100,6 +109,21 @@ static void add_midictl_event(Midictl_list *global_midictl_list, uint8_t *data,
 	cur_midictl->value = data[VALUE_OFFSET];
 }
 
+static void add_rltm_event(Midi_rltm_list *global_rltm_list, uint8_t byte) {
+	Midi_rltm_list cur_rltm;
+	if (!*global_rltm_list) {
+	    *global_rltm_list = allocate(struct s_midi_rltm_list, 1);
+	    cur_rltm = *global_rltm_list;
+	} else {
+	    cur_rltm = *global_rltm_list;
+	    while (cur_rltm->next) cur_rltm = cur_rltm->next;
+	    cur_rltm->next = allocate(struct s_midi_rltm_list, 1);
+	    cur_rltm = cur_rltm->next;
+	}
+	cur_rltm->next = NULL;
+	cur_rltm->byte = byte;
+}
+
 static unsigned long midiclk_from_ms(uint32_t ms) {
 	return ms * (tempo / (float) 2500);
 }
@@ -112,14 +136,15 @@ static int process_callback(jack_nframes_t nframes, void *arg) {
 	jack_midi_event_t jack_midi_event;
 	jack_nframes_t event_index = 0;
 	Midictl_list cur_midictl;
+	Midi_rltm_list cur_rltm;
 	uint8_t data[MIDI_CTL_SIZE];
 
 	pthread_mutex_lock(&midi_lock);
 
 	void *midi_in_buf = jack_port_get_buffer(midi_in_port, nframes);
-	void *midi_led_buf = jack_port_get_buffer(midi_led_port, nframes);
+	void *midi_out_buf = jack_port_get_buffer(midi_out_port, nframes);
 
-        jack_midi_clear_buffer(midi_led_buf);
+        jack_midi_clear_buffer(midi_out_buf);
 
 	if (!midictl_led_list)
 	    pthread_cond_signal(&write_data_ready);
@@ -128,10 +153,18 @@ static int process_callback(jack_nframes_t nframes, void *arg) {
             cur_midictl = midictl_led_list;
             midictl_led_list = midictl_led_list->next;
 	    CONTROL_TO_BUFFER(data, cur_midictl->control, cur_midictl->value);
-            jack_midi_event_write(midi_led_buf, event_index++, data,
+            jack_midi_event_write(midi_out_buf, event_index++, data,
                                 MIDI_CTL_SIZE);
             free(cur_midictl);
         }
+
+	while (midi_rltm_list) {
+	    cur_rltm = midi_rltm_list;
+	    midi_rltm_list = midi_rltm_list->next;
+	    RLTM_TO_BUFFER(data, cur_rltm->byte);
+	    jack_midi_event_write(midi_out_buf, event_index++, data, 1);
+	    free(cur_rltm);
+	}
 
         event_index = 0;
 
@@ -213,11 +246,11 @@ static int jack_init(const char *client_name) {
 			JACK_DEFAULT_MIDI_TYPE,
 			JackPortIsInput | JackPortIsTerminal, 0);
 	
-	midi_led_port = jack_port_register(jack_client, "midi_led_out",
+	midi_out_port = jack_port_register(jack_client, "midi_out",
 			JACK_DEFAULT_MIDI_TYPE,
 			JackPortIsOutput | JackPortIsTerminal, 0);
 	
-	if (!(midi_in_port && midi_led_port)) return -1;
+	if (!(midi_in_port && midi_out_port)) return -1;
 	
 	jack_set_process_callback(jack_client, process_callback, 0);
 
@@ -258,8 +291,8 @@ static int jack_close(void) {
 	jack_deactivate(jack_client);
 	if (midi_in_port)
 	    jack_port_unregister(jack_client, midi_in_port);
-	if (midi_led_port)
-	    jack_port_unregister(jack_client, midi_led_port);
+	if (midi_out_port)
+	    jack_port_unregister(jack_client, midi_out_port);
 	return jack_client_close(jack_client);
 }
 
@@ -315,11 +348,11 @@ static int process_read_data(void) {
 	    }
 
 	    KORG_BACK_BUTTON_PRESSED(cur_midictl) {
-		avr_delta_measure(-30);
+		avr_delta_measure(-1);
 	    }
 
 	    KORG_FORWARD_BUTTON_PRESSED(cur_midictl) {
-		avr_delta_measure(10);
+		avr_delta_measure(1);
 	    }
 
 	    free(cur_midictl);
@@ -328,9 +361,11 @@ static int process_read_data(void) {
 	if (transport_change) {
 	    if (transport_status & TRANSPORT_RUNNING) {
 		jack_transport_start(jack_client);
+		add_rltm_event(&midi_rltm_list, MIDI_CLOCK_CONT);
 		midi_clock_counting = 1;
 	    } else {
 		jack_transport_stop(jack_client);
+		add_rltm_event(&midi_rltm_list, MIDI_CLOCK_STOP);
 		midi_clock_counting = 0;
 		transport_status &= ~TRANSPORT_RECORDING;
 	    }

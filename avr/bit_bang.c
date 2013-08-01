@@ -184,21 +184,33 @@ ISR(RX_INT_VECT, ISR_NAKED) {
       	"	cp r11,r16		    \n\t" /* (1) */
       	"	brne rloop		    \n\t" /* (1/2) */
       	"	sts (%[rx_buf]+%[local_packet_buf_size]-1),r10	\n\t" /* (2) */
- 	"	mov r16,r10		    \n\t" /* (2) */ /* Check cur byte */
-      	"	cpi r16,%[packet_realtime]  \n\t" /* (1) */
-      	"	brsh rrltm		    \n\t" /* (1/2) */
- 	"	lds r16,(%[rx_buf]+1)	    \n\t" /* (2) */ /* Check byte 1 */
-      	"	cpi r16,%[packet_header]    \n\t" /* (1) */
-      	"	breq rexit		    \n\t" /* (1/2) */
-	"	ldi r16,(%[local_packet_buf_size]-1)	\n\t" /* (1) */
+
+	"	mov r16,r12		    \n\t" /* (1) */
+	"	cpi r16,0		    \n\t" /* (1) */ /* Check byte 0 */
+	"	brne 1f			    \n\t" /* (1/2) */
+
+	"	mov r16,r10		    \n\t" /* (1) */
+      	"	cpi r16,%[packet_header]    \n\t" /* (1) */ /* Check header */
+      	"	breq rstop		    \n\t" /* (1/2) */
+	"	rjmp rrlt		    \n\t"
+
+	"1:	ldi r16,(%[local_packet_buf_size]-1)	\n\t" /* (1) */
       	"	cp r12,r16		    \n\t" /* (1) */ /* Check byte n */
-      	"	brne rstop		    \n\t" /* (1/2) */
+    	"	brne rmid	    	    \n\t" /* (1/2) */
+
 	"	ldi r16,0		    \n\t" /* (1) */
  	"	sts %[p],r16		    \n\t" /* (2) */
- 	"	mov r16,r10		    \n\t" /* (2) */
+
+ 	"	mov r16,r10		    \n\t" /* (1) */
       	"	cpi r16,%[packet_footer]    \n\t" /* (1) */
-      	"	brne rexit		    \n\t" /* (1/2) */
-      	"	ldi r16,%[packet_in_ready]  \n\t"	    /* Time is not */
+      	"	breq rfin		    \n\t" /* (1/2) */
+
+	"rrlt:	mov r16,r10		    \n\t"
+      	"	cpi r16,%[packet_realtime]  \n\t" /* (1) */ /* Check realtime */
+      	"	brsh rrltm		    \n\t" /* (1/2) */
+	"	rjmp rexit		    \n\t" /* (2) */
+
+      	"rfin:	ldi r16,%[packet_in_ready]  \n\t"	    /* Time is not */
  	"	sts %[packet_status],r16    \n\t"	    /* critical here */
 	"rintd:	ldi r16,%[rx_int_pin]	    \n\t"
 	"	mov r10,r16		    \n\t"
@@ -207,6 +219,11 @@ ISR(RX_INT_VECT, ISR_NAKED) {
 	"	and r16,r10		    \n\t"
 	"	sts %[rx_int_msk_add],r16   \n\t"	    /* Disable int */
 	"	rjmp rexit		    \n\t" /* (2) */
+
+	"rmid:	mov r16,r10		    \n\t" /* (1) */
+      	"	cpi r16,%[packet_realtime]  \n\t" /* (1) */ /* Check realtime */
+      	"	brsh rrltm		    \n\t" /* (1/2) */
+
 	"rstop:	ldi r16,9		    \n\t"
 	"1:	dec r16			    \n\t" /* (27) */
 	"	brne 1b			    \n\t"
@@ -226,6 +243,8 @@ ISR(RX_INT_VECT, ISR_NAKED) {
         "	reti			    \n\t" /* (4) */
       	"rrltm:	ldi r16,%[packet_rltm_ready]\n\t"	    /* Time is not */
  	"	sts %[packet_status],r16    \n\t"	    /* critical here */
+	"	ldi r16,0		    \n\t"
+	"	sts %[p],r16		    \n\t"
 	"	rjmp rintd		    \n\t"
 	: /* No output, modifies rx_buffer */
 	:   [rx_buf] "p" (rx_buf),
@@ -236,7 +255,7 @@ ISR(RX_INT_VECT, ISR_NAKED) {
 	    [local_packet_buf_size] "i" (AVR_SYSEX_BUF_SIZE),
 	    [packet_header] "i" (PACKET_HEADER),
 	    [packet_footer] "i" (PACKET_FOOTER),
-	    [packet_realtime] "i" (PACKET_REALTIME),
+	    [packet_realtime] "i" (PACKET_NOT_SYSEX),
 	    [packet_in_ready] "i" (PACKET_IN_READY),
 	    [packet_rltm_ready] "i" (PACKET_RLTM_READY),
 	    [rx_int_msk_add] "i" (RX_INT_MSK_ADD),
