@@ -124,6 +124,7 @@ void avr_req_view(void) {
 
 void avr_delta_measure(int16_t val) {
 	struct avr_cmd *cmd = (struct avr_cmd *) (tx_buf + PACKET_DATA_OFFSET);
+	if (val == 0) return;
 	cmd->cmd = DELTA_MEASURE;
 	set_arg_16(cmd, (uint16_t) val);
 	pad_tx_packet();

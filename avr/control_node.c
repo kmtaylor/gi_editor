@@ -113,6 +113,7 @@ static void delta_measure(uint8_t *val_bytes) {
 	PCMSK0 |=  _BV(PCINT3);
         busy_wait();
         PCMSK0 &= ~_BV(PCINT3);
+	cli();
 
 	if (!view_set) toggle_output(VIEW_BUTTON, 0);
 
@@ -125,6 +126,8 @@ static void delta_measure(uint8_t *val_bytes) {
 
 	if (!view_set) toggle_output(VIEW_BUTTON, 0);
 	view_set = 0;
+
+	sei();
 }
 
 static void process_command(uint8_t *command) {

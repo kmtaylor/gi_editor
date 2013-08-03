@@ -25,6 +25,7 @@
 #include <string.h>
 #include <signal.h>
 #include <unistd.h>
+#include <math.h>
 
 #include <jack/jack.h>
 #include <jack/midiport.h>
@@ -124,12 +125,30 @@ static void add_rltm_event(Midi_rltm_list *global_rltm_list, uint8_t byte) {
 	cur_rltm->byte = byte;
 }
 
-static unsigned long midiclk_from_ms(uint32_t ms) {
+static unsigned long midiclk_from_ms(unsigned long ms) {
 	return ms * (tempo / (float) 2500);
 }
 
-static uint32_t ms_from_midiclk(void) {
+static unsigned long ms_from_midiclk(void) {
 	return midi_clock_count * (2500 / (float) tempo);
+}
+
+static long midiclk_measures(void) {
+	return 1 + lround(midi_clock_count * 25 / (float) 2400);
+}
+
+static void set_midiclk_measures(long measures) {
+	midi_clock_count = 96 * (measures - 1);	
+}
+
+static long measure_from_frame(jack_position_t *pos) {
+	return 1 + lround((tempo * pos->frame) /
+			(double) (240 * pos->frame_rate));
+}
+
+static long frame_from_measure(jack_position_t *pos, int measure) {
+	return lround(240 * (measure - 1) * (pos->frame_rate-1) /
+			(double) tempo);
 }
 
 static int process_callback(jack_nframes_t nframes, void *arg) {
@@ -149,6 +168,14 @@ static int process_callback(jack_nframes_t nframes, void *arg) {
 	if (!midictl_led_list)
 	    pthread_cond_signal(&write_data_ready);
 
+	while (midi_rltm_list) {
+	    cur_rltm = midi_rltm_list;
+	    midi_rltm_list = midi_rltm_list->next;
+	    RLTM_TO_BUFFER(data, cur_rltm->byte);
+	    jack_midi_event_write(midi_out_buf, event_index++, data, 1);
+	    free(cur_rltm);
+	}
+
         while (midictl_led_list) {
             cur_midictl = midictl_led_list;
             midictl_led_list = midictl_led_list->next;
@@ -157,14 +184,6 @@ static int process_callback(jack_nframes_t nframes, void *arg) {
                                 MIDI_CTL_SIZE);
             free(cur_midictl);
         }
-
-	while (midi_rltm_list) {
-	    cur_rltm = midi_rltm_list;
-	    midi_rltm_list = midi_rltm_list->next;
-	    RLTM_TO_BUFFER(data, cur_rltm->byte);
-	    jack_midi_event_write(midi_out_buf, event_index++, data, 1);
-	    free(cur_rltm);
-	}
 
         event_index = 0;
 
@@ -195,12 +214,39 @@ static int process_callback(jack_nframes_t nframes, void *arg) {
 	return 0;
 }
 
-void timebase_callback(jack_transport_state_t state,
+static int sync_callback(jack_transport_state_t state, jack_position_t *pos,
+		void *ard) {
+	unsigned long jack_time_ms;
+
+	
+	long jack_measure = measure_from_frame(pos);
+	long measure_frame = frame_from_measure(pos, jack_measure);
+	long delta = (pos->frame > measure_frame ?
+			(pos->frame - measure_frame) :
+			(measure_frame - pos->frame));
+
+	/* If we are within 10 frames, consider it a measure boundary,
+	 * otherwise, just ignore the sync request */
+	if (delta > 10) return 1;
+
+	//printf("GI measure %li\n", midiclk_measures());
+	//printf("Jack measure %li\n", jack_measure);
+	//printf("Adjusting by %li measures\n", jack_measure - midiclk_measures());
+
+	pthread_mutex_lock(&midi_lock);
+	avr_delta_measure(jack_measure - midiclk_measures());
+	set_midiclk_measures(jack_measure);
+	pthread_mutex_unlock(&midi_lock);
+
+	return 1;
+}
+
+static void timebase_callback(jack_transport_state_t state,
 		jack_nframes_t nframes, jack_position_t *pos,
 		int new_pos, void *arg) {
-	uint32_t jack_time_ms;
-	uint32_t device_time_ms;
-	uint32_t jitter;
+	unsigned long jack_time_ms;
+	unsigned long device_time_ms;
+	unsigned long jitter;
 	jack_nframes_t new_frame;
 	static int begin_counting;
 
@@ -213,16 +259,15 @@ void timebase_callback(jack_transport_state_t state,
 	    return;
 	}
 
-	jack_time_ms = pos->frame * (1000 / (float) pos->frame_rate);
-
 	if (begin_counting) {
 	    pthread_mutex_lock(&midi_lock);
 	    midi_clock_counting = 1;
-	    midi_clock_count = midiclk_from_ms(jack_time_ms);
 	    pthread_mutex_unlock(&midi_lock);
 	    printf("Transport rolling\n");
 	    begin_counting = 0;
 	}
+
+	jack_time_ms = pos->frame * (1000 / (float) pos->frame_rate);
 
 	device_time_ms = ms_from_midiclk();
 	jitter = (device_time_ms > jack_time_ms ?
@@ -230,7 +275,7 @@ void timebase_callback(jack_transport_state_t state,
 			(jack_time_ms - device_time_ms));
 
 	if (jitter > JITTER_TOLERANCE) {
-	    printf("Sync required, jitter time in ms %i\n", jitter);
+	    printf("Sync required, jitter time in ms %li\n", jitter);
 	    new_frame = device_time_ms * (pos->frame_rate / 1000);
 	    jack_transport_locate(jack_client, new_frame);
 	}
@@ -252,7 +297,11 @@ static int jack_init(const char *client_name) {
 	
 	if (!(midi_in_port && midi_out_port)) return -1;
 	
-	jack_set_process_callback(jack_client, process_callback, 0);
+	if (jack_set_process_callback(jack_client, process_callback, 0) < 0)
+		return -1;
+
+	if (jack_set_sync_callback(jack_client, sync_callback, 0) < 0)
+		return -1;
 
 	if (do_sync) {
 	    if (jack_set_timebase_callback(jack_client, 
@@ -306,6 +355,8 @@ static int process_read_data(void) {
 	Midictl_list cur_midictl;
 	static enum e_status old_transport_status;
 	int transport_change = old_transport_status != transport_status;
+	jack_position_t pos;
+	long measure, frame;
 
         pthread_mutex_lock(&midi_lock);
 
@@ -319,8 +370,8 @@ static int process_read_data(void) {
 	    midictl_in_list = midictl_in_list->next;
 
 	    KORG_START_BUTTON_PRESSED(cur_midictl) {
-		    printf("start button\n");
 		jack_transport_locate(jack_client, 0);
+		avr_toggle_restart();
 		if (transport_status & TRANSPORT_RECORDING) {
 		    transport_status &= ~TRANSPORT_RECORDING;
 		    transport_change = 1;
@@ -328,7 +379,6 @@ static int process_read_data(void) {
 	    }
 
 	    KORG_REC_BUTTON_PRESSED(cur_midictl) {
-		    printf("rec button\n");
 		transport_change = 1;
 		(transport_status & TRANSPORT_RECORDING) ?
 			( transport_status &= ~TRANSPORT_RECORDING ) :
@@ -336,23 +386,27 @@ static int process_read_data(void) {
 	    }
 
 	    KORG_PLAY_BUTTON_PRESSED(cur_midictl) {
-		    printf("play button\n");
 		transport_status |= TRANSPORT_RUNNING;
 		transport_change = 1;
 	    }
 
 	    KORG_STOP_BUTTON_PRESSED(cur_midictl) {
-		    printf("stop button\n");
 		transport_status &= ~TRANSPORT_RUNNING;
 		transport_change = 1;
 	    }
 
 	    KORG_BACK_BUTTON_PRESSED(cur_midictl) {
-		avr_delta_measure(-1);
+		jack_transport_query(jack_client, &pos);
+		measure = measure_from_frame(&pos);
+		frame = frame_from_measure(&pos, --measure);
+		jack_transport_locate(jack_client, frame);
 	    }
 
 	    KORG_FORWARD_BUTTON_PRESSED(cur_midictl) {
-		avr_delta_measure(1);
+		jack_transport_query(jack_client, &pos);
+		measure = measure_from_frame(&pos);
+		frame = frame_from_measure(&pos, ++measure);
+		jack_transport_locate(jack_client, frame);
 	    }
 
 	    free(cur_midictl);
@@ -393,15 +447,15 @@ int main(int argc, char **argv) {
 	    printf("Midi clock tempo: %ibpm\n", tempo);
 	}
 
-	if (avr_api_init(CLIENT_CONTROLLER_NAME,
-				LIBGIEDITOR_READ | LIBGIEDITOR_WRITE) < 0 ) {
-	    printf("Couldn't initialise avr interface.\n");
-	    exit(1);
-	}
 	if (jack_init(CLIENT_NAME) < 0) {
 	    printf("Couldn't initialise jack client.\n"
 		    "Check that jackd is running and there is no existing "
 		    "timebase master.\n");
+	    exit(1);
+	}
+	if (avr_api_init(CLIENT_CONTROLLER_NAME,
+				LIBGIEDITOR_READ | LIBGIEDITOR_WRITE) < 0 ) {
+	    printf("Couldn't initialise avr interface.\n");
 	    exit(1);
 	}
 	signal(SIGINT, signal_handler);

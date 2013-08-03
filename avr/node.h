@@ -24,7 +24,7 @@
 #define PACKET_RLTM_OFFSET AVR_SYSEX_BUF_SIZE - 1
 
 static inline void busy_wait(void) {
-	volatile int i = 6000;
+	volatile int i = 10000;
 	while (i) i--;
 }
 

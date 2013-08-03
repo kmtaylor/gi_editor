@@ -52,7 +52,6 @@ static inline void init_uart(void) {
 	PCICR |= (1<<PCIE2);
 	DDRD |= (1<<DDD1) | (1<<DDD0);
 	PORTD &= ~(1<<PD0);
-	rx_buf[0] = PACKET_HEADER;
 	clock_prescale_set(CLOCK_DIVISOR);
 }
 
