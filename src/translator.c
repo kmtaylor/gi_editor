@@ -282,7 +282,7 @@ static struct controller juno_106[] = {
 	// TVF Cutoff Keyfolow Offset
 	{ 0x12,	1,  0, 0x10003015,	    0,	       44,	     84	},
 	// Filter Type
-	{ 0x13,	1,  0, 0x10003013,	    0,	        0,	      6	},
+	{ 0x13,	1,  0, 0x10003013,	    0,	        0,	      4	},
 	// ADSR
 	{ 0x04,	1,  0, 0x10003032,	    0,		0,	    127,
 							juno_adsr_callback},

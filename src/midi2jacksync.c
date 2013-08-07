@@ -87,7 +87,8 @@ static enum e_status transport_status;
 
 static jack_client_t *jack_client;
 static jack_port_t *midi_in_port;
-static jack_port_t *midi_out_port;
+static jack_port_t *midi_led_port;
+static jack_port_t *midi_rltm_port;
 
 static pthread_mutex_t midi_lock = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t read_data_ready = PTHREAD_COND_INITIALIZER;
@@ -161,9 +162,11 @@ static int process_callback(jack_nframes_t nframes, void *arg) {
 	pthread_mutex_lock(&midi_lock);
 
 	void *midi_in_buf = jack_port_get_buffer(midi_in_port, nframes);
-	void *midi_out_buf = jack_port_get_buffer(midi_out_port, nframes);
+	void *midi_led_buf = jack_port_get_buffer(midi_led_port, nframes);
+	void *midi_rltm_buf = jack_port_get_buffer(midi_rltm_port, nframes);
 
-        jack_midi_clear_buffer(midi_out_buf);
+        jack_midi_clear_buffer(midi_led_buf);
+        jack_midi_clear_buffer(midi_rltm_buf);
 
 	if (!midictl_led_list)
 	    pthread_cond_signal(&write_data_ready);
@@ -172,15 +175,17 @@ static int process_callback(jack_nframes_t nframes, void *arg) {
 	    cur_rltm = midi_rltm_list;
 	    midi_rltm_list = midi_rltm_list->next;
 	    RLTM_TO_BUFFER(data, cur_rltm->byte);
-	    jack_midi_event_write(midi_out_buf, event_index++, data, 1);
+	    jack_midi_event_write(midi_rltm_buf, event_index++, data, 1);
 	    free(cur_rltm);
 	}
+	
+        event_index = 0;
 
         while (midictl_led_list) {
             cur_midictl = midictl_led_list;
             midictl_led_list = midictl_led_list->next;
 	    CONTROL_TO_BUFFER(data, cur_midictl->control, cur_midictl->value);
-            jack_midi_event_write(midi_out_buf, event_index++, data,
+            jack_midi_event_write(midi_led_buf, event_index++, data,
                                 MIDI_CTL_SIZE);
             free(cur_midictl);
         }
@@ -218,20 +223,19 @@ static int sync_callback(jack_transport_state_t state, jack_position_t *pos,
 		void *ard) {
 	unsigned long jack_time_ms;
 
-	
 	long jack_measure = measure_from_frame(pos);
 	long measure_frame = frame_from_measure(pos, jack_measure);
 	long delta = (pos->frame > measure_frame ?
 			(pos->frame - measure_frame) :
 			(measure_frame - pos->frame));
 
-	/* If we are within 10 frames, consider it a measure boundary,
+	/* If we are within 100 frames, consider it a measure boundary,
 	 * otherwise, just ignore the sync request */
-	if (delta > 10) return 1;
+	if (delta > 100) return 1;
 
-	//printf("GI measure %li\n", midiclk_measures());
-	//printf("Jack measure %li\n", jack_measure);
-	//printf("Adjusting by %li measures\n", jack_measure - midiclk_measures());
+	printf("GI measure %li\n", midiclk_measures());
+	printf("Jack measure %li\n", jack_measure);
+	printf("Adjusting by %li measures\n", jack_measure - midiclk_measures());
 
 	pthread_mutex_lock(&midi_lock);
 	avr_delta_measure(jack_measure - midiclk_measures());
@@ -291,17 +295,23 @@ static int jack_init(const char *client_name) {
 			JACK_DEFAULT_MIDI_TYPE,
 			JackPortIsInput | JackPortIsTerminal, 0);
 	
-	midi_out_port = jack_port_register(jack_client, "midi_out",
+	midi_led_port = jack_port_register(jack_client, "midi_led",
 			JACK_DEFAULT_MIDI_TYPE,
 			JackPortIsOutput | JackPortIsTerminal, 0);
 	
-	if (!(midi_in_port && midi_out_port)) return -1;
+	midi_rltm_port = jack_port_register(jack_client, "midi_rltm",
+			JACK_DEFAULT_MIDI_TYPE,
+			JackPortIsOutput | JackPortIsTerminal, 0);
+	
+	if (!(midi_in_port && midi_led_port && midi_rltm_port)) return -1;
 	
 	if (jack_set_process_callback(jack_client, process_callback, 0) < 0)
 		return -1;
 
-	if (jack_set_sync_callback(jack_client, sync_callback, 0) < 0)
+	if (do_sync) {
+	    if (jack_set_sync_callback(jack_client, sync_callback, 0) < 0)
 		return -1;
+	}
 
 	if (do_sync) {
 	    if (jack_set_timebase_callback(jack_client, 
@@ -340,8 +350,10 @@ static int jack_close(void) {
 	jack_deactivate(jack_client);
 	if (midi_in_port)
 	    jack_port_unregister(jack_client, midi_in_port);
-	if (midi_out_port)
-	    jack_port_unregister(jack_client, midi_out_port);
+	if (midi_led_port)
+	    jack_port_unregister(jack_client, midi_led_port);
+	if (midi_rltm_port)
+	    jack_port_unregister(jack_client, midi_rltm_port);
 	return jack_client_close(jack_client);
 }
 
@@ -355,6 +367,7 @@ static int process_read_data(void) {
 	Midictl_list cur_midictl;
 	static enum e_status old_transport_status;
 	int transport_change = old_transport_status != transport_status;
+	int do_led_update = 0;
 	jack_position_t pos;
 	long measure, frame;
 
@@ -379,7 +392,8 @@ static int process_read_data(void) {
 	    }
 
 	    KORG_REC_BUTTON_PRESSED(cur_midictl) {
-		transport_change = 1;
+		do_led_update = 1;
+		avr_toggle_rec();
 		(transport_status & TRANSPORT_RECORDING) ?
 			( transport_status &= ~TRANSPORT_RECORDING ) :
 			( transport_status |=  TRANSPORT_RECORDING );
@@ -393,6 +407,9 @@ static int process_read_data(void) {
 	    KORG_STOP_BUTTON_PRESSED(cur_midictl) {
 		transport_status &= ~TRANSPORT_RUNNING;
 		transport_change = 1;
+		if (transport_status & TRANSPORT_RECORDING) {
+		    transport_status &= ~TRANSPORT_RECORDING;
+		}
 	    }
 
 	    KORG_BACK_BUTTON_PRESSED(cur_midictl) {
@@ -421,10 +438,11 @@ static int process_read_data(void) {
 		jack_transport_stop(jack_client);
 		add_rltm_event(&midi_rltm_list, MIDI_CLOCK_STOP);
 		midi_clock_counting = 0;
-		transport_status &= ~TRANSPORT_RECORDING;
 	    }
-	    update_leds();
+	    do_led_update = 1;
 	}
+
+	if (do_led_update) update_leds();
 
 	old_transport_status = transport_status;
 

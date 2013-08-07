@@ -692,6 +692,23 @@ static void do_paste(MidiClassMember *tmp_member, MidiClass *cur_class,
 	}
 }
 
+static char *make_long_name(const char *orig_name, int len) {
+	int i;
+	char *long_name;
+	char *func_name = "make_long_name()";
+
+	long_name = allocate(char, len + 1, func_name);
+
+	strncpy(long_name, orig_name, len);
+
+	for (i = strlen(orig_name); i < len; i++) {
+	    long_name[i] = ' ';
+	}
+	long_name[len] = '\0';
+	
+	return long_name;
+}
+
 static void sysex_explorer(char **headers, char *footer, MidiClass *cur_class,
 		uint32_t sysex_base_addr) {
 	PANEL *explorer_panel;
@@ -703,21 +720,27 @@ static void sysex_explorer(char **headers, char *footer, MidiClass *cur_class,
 	int retval;
 	int n_members = cur_class->size;
 	int n_parents = libgieditor_class_num_parents(cur_class);
+	int menu_width = COLS - 23;
 	int c, i, want_break = 0, want_refresh = 1;
 	int position = 0, skip = 0, damaged = 1;
 	char *func_name = "sysex_explorer()";
 	char **new_headers;
 	char *filename;
 	char *long_filename;
+	char **long_names;
 	MidiClassMember *tmp_member;
 	uint32_t print_sysex_value;
 	midi_address *first_member_address;
 	
 	cbreak(); clear();
 
+	long_names = allocate(char *, n_members, func_name);
+
 	member_items = allocate(ITEM *, n_members + 1, func_name);
 	for (i = 0; i < n_members; i++) {
-	    member_items[i] = new_item(cur_class->members[i].name, NULL);
+	    long_names[i] = make_long_name(cur_class->members[i].name,
+			    menu_width);
+	    member_items[i] = new_item(long_names[i], NULL);
 	    set_item_userptr(member_items[i], (void *) &cur_class->members[i]);
 	}
 	member_items[n_members] = NULL;
@@ -934,6 +957,9 @@ static void sysex_explorer(char **headers, char *footer, MidiClass *cur_class,
 	unpost_menu(explorer_menu);
 	free_menu(explorer_menu);
 	free(member_items);
+	for (i = 0; i < n_members; i++)
+	    free(long_names[i]);
+	free(long_names);
 	del_panel(explorer_panel);
 	delwin(menu_sub_win);
 	delwin(explorer_win);
