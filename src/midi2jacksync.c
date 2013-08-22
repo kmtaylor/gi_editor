@@ -229,9 +229,9 @@ static int sync_callback(jack_transport_state_t state, jack_position_t *pos,
 			(pos->frame - measure_frame) :
 			(measure_frame - pos->frame));
 
-	/* If we are within 100 frames, consider it a measure boundary,
+	/* If we are within 300 frames, consider it a measure boundary,
 	 * otherwise, just ignore the sync request */
-	if (delta > 100) return 1;
+	if (delta > 300) return 1;
 
 	printf("GI measure %li\n", midiclk_measures());
 	printf("Jack measure %li\n", jack_measure);

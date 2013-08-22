@@ -35,6 +35,7 @@
 #define CLIENT_IN_NAME "ControlTranslatorCTL"
 
 #define MIDI_CTL_MSG	    0xB0
+#define MIDI_NOTE_MSG	    0x90
 #define MIDI_CTL_CHANNEL    0
 #define MIDI_CTL_SIZE	    3
 #define CONTROL_OFFSET	    1
@@ -57,6 +58,7 @@ struct s_midictl_list {
 
 /* Only access with midi_lock */
 static Midictl_list midictl_in_list;
+static Midictl_list midictl_note_list;
 static Midictl_list midictl_led_list;
 static Midictl_list midictl_ctl_list;
 
@@ -67,6 +69,7 @@ static jack_port_t *midi_ctl_port;
 
 static pthread_mutex_t midi_lock = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t read_data_ready = PTHREAD_COND_INITIALIZER;
+static pthread_cond_t note_data_ready = PTHREAD_COND_INITIALIZER;
 static pthread_cond_t write_data_ready = PTHREAD_COND_INITIALIZER;
 
 static void add_midictl_event(Midictl_list *global_midictl_list, uint8_t *data, 
@@ -128,12 +131,16 @@ static int jack_callback(jack_nframes_t nframes, void *arg) {
 
 	while (jack_midi_event_get(&jack_midi_event, midi_in_buf, 
 					event_index++) == 0) {
-	    if ((jack_midi_event.buffer[0] & MIDI_CTL_MSG) == MIDI_CTL_MSG) {
+	    if ((jack_midi_event.buffer[0] & 0xF0) == MIDI_CTL_MSG) {
 		add_midictl_event(&midictl_in_list, jack_midi_event.buffer,
 				    jack_midi_event.size);
 		pthread_cond_signal(&read_data_ready);
 	    }
-			
+	    if ((jack_midi_event.buffer[0] & 0xF0) == MIDI_NOTE_MSG) {
+		add_midictl_event(&midictl_note_list, jack_midi_event.buffer,
+				    jack_midi_event.size);
+		pthread_cond_signal(&note_data_ready);
+	    }
 	}
 
 	pthread_mutex_unlock(&midi_lock);
@@ -227,6 +234,8 @@ struct controller {
 	uint32_t    state;
 };
 
+typedef void (*note_forwarder)(unsigned char note);
+
 #define NUM_TO_COPY 8
 static void juno_adsr_callback(struct controller *cur_controller) {
 	int i;
@@ -265,7 +274,7 @@ static void juno_adsr_callback(struct controller *cur_controller) {
 	prev_respond_to = cur_controller->respond_to;
 };
 
-static struct controller juno_106[] = {
+static struct controller juno_106_0[] = {
 	/* R	S   L	Sysex Add    CTL Add	    Min		Max */
 	// LFO1 Rate
 	{ 0x00,	1,  0, 0x10003039,	    0,		0,	    127	},
@@ -316,6 +325,222 @@ static struct controller juno_106[] = {
 	{ 0x35,	1,  1, 0x1000200e,	    0,		0,	      1	},
 	// LFO1 Key Trigger
 	{ 0x30,	1,  1, 0x1000303b,	    0,		0,	      1	},
+	{ -1 }
+};
+
+static struct controller juno_106_1[] = {
+	/* R	S   L	Sysex Add    CTL Add	    Min		Max */
+	// LFO1 Rate
+	{ 0x00,	1,  0, 0x10003139,	    0,		0,	    127	},
+	// Vibrato Rate
+	{ 0x10,	1,  0, 0x10002118,	    0,		0,	    127	},
+	// Vibrato Delay
+	{ 0x01,	1,  0, 0x1000211a,	    0,		0,	    127	},
+	// Vibrato Depth
+	{ 0x11,	1,  0, 0x10002119,	    0,		0,	    127	},
+	// LFO1 TVF Depth Offset
+	{ 0x02,	1,  0, 0x1000313d,	    0,		1,	    127	},
+	// TVF Env Depth Offset
+	{ 0x03,	1,  0, 0x1000311a,	    0,		1,	    127	},
+	// TVF Cutoff Keyfolow Offset
+	{ 0x12,	1,  0, 0x10003115,	    0,	       44,	     84	},
+	// Filter Type
+	{ 0x13,	1,  0, 0x10003113,	    0,	        0,	      4	},
+	// ADSR
+	{ 0x04,	1,  0, 0x10003132,	    0,		0,	    127,
+							juno_adsr_callback},
+	{ 0x05,	1,  0, 0x10003134,	    0,		0,	    127,
+							juno_adsr_callback},
+	{ 0x06,	1,  0, 0x10003138,	    0,		0,	    127,
+							juno_adsr_callback},
+	{ 0x07,	1,  0, 0x10003135,	    0,		0,	    127,
+							juno_adsr_callback},
+	{ 0x04,	1,  0, 0x10003120,	    0,		0,	    127,
+							juno_adsr_callback},
+	{ 0x05,	1,  0, 0x10003122,	    0,		0,	    127,
+							juno_adsr_callback},
+	{ 0x06,	1,  0, 0x10003127,	    0,		0,	    127,
+							juno_adsr_callback},
+	{ 0x07,	1,  0, 0x10003123,	    0,		0,	    127,
+							juno_adsr_callback},
+	// Cutoff
+	{ 0x14,	1,  0, 0x10003114,	    0,	        1,	    127	},
+	// Resonance
+	{ 0x15,	1,  0, 0x10003118,	    0,	        0,	    127	},
+	// Pitch Bend Sens
+	{ 0x16,	1,  0, 0x1000210f,	    0,	        0,	     24	},
+	// Portamento Time
+	{ 0x17,	1,  0, 0x10002111,	    0,	        0,	    127	},
+	// Portamento Switch
+	{ 0x37,	1,  1, 0x10002110,	    0,		0,	      1	},
+	// Mono/Poly Switch
+	{ 0x36,	1,  1, 0x1000210d,	    0,		0,	      1	},
+	// Legato Switch
+	{ 0x35,	1,  1, 0x1000210e,	    0,		0,	      1	},
+	// LFO1 Key Trigger
+	{ 0x30,	1,  1, 0x1000313b,	    0,		0,	      1	},
+	{ -1 }
+};
+
+static struct controller juno_106_2[] = {
+	/* R	S   L	Sysex Add    CTL Add	    Min		Max */
+	// LFO1 Rate
+	{ 0x00,	1,  0, 0x10003239,	    0,		0,	    127	},
+	// Vibrato Rate
+	{ 0x10,	1,  0, 0x10002218,	    0,		0,	    127	},
+	// Vibrato Delay
+	{ 0x01,	1,  0, 0x1000221a,	    0,		0,	    127	},
+	// Vibrato Depth
+	{ 0x11,	1,  0, 0x10002219,	    0,		0,	    127	},
+	// LFO1 TVF Depth Offset
+	{ 0x02,	1,  0, 0x1000323d,	    0,		1,	    127	},
+	// TVF Env Depth Offset
+	{ 0x03,	1,  0, 0x1000321a,	    0,		1,	    127	},
+	// TVF Cutoff Keyfolow Offset
+	{ 0x12,	1,  0, 0x10003215,	    0,	       44,	     84	},
+	// Filter Type
+	{ 0x13,	1,  0, 0x10003213,	    0,	        0,	      4	},
+	// ADSR
+	{ 0x04,	1,  0, 0x10003232,	    0,		0,	    127,
+							juno_adsr_callback},
+	{ 0x05,	1,  0, 0x10003234,	    0,		0,	    127,
+							juno_adsr_callback},
+	{ 0x06,	1,  0, 0x10003238,	    0,		0,	    127,
+							juno_adsr_callback},
+	{ 0x07,	1,  0, 0x10003235,	    0,		0,	    127,
+							juno_adsr_callback},
+	{ 0x04,	1,  0, 0x10003220,	    0,		0,	    127,
+							juno_adsr_callback},
+	{ 0x05,	1,  0, 0x10003222,	    0,		0,	    127,
+							juno_adsr_callback},
+	{ 0x06,	1,  0, 0x10003227,	    0,		0,	    127,
+							juno_adsr_callback},
+	{ 0x07,	1,  0, 0x10003223,	    0,		0,	    127,
+							juno_adsr_callback},
+	// Cutoff
+	{ 0x14,	1,  0, 0x10003214,	    0,	        1,	    127	},
+	// Resonance
+	{ 0x15,	1,  0, 0x10003218,	    0,	        0,	    127	},
+	// Pitch Bend Sens
+	{ 0x16,	1,  0, 0x1000220f,	    0,	        0,	     24	},
+	// Portamento Time
+	{ 0x17,	1,  0, 0x10002211,	    0,	        0,	    127	},
+	// Portamento Switch
+	{ 0x37,	1,  1, 0x10002210,	    0,		0,	      1	},
+	// Mono/Poly Switch
+	{ 0x36,	1,  1, 0x1000220d,	    0,		0,	      1	},
+	// Legato Switch
+	{ 0x35,	1,  1, 0x1000220e,	    0,		0,	      1	},
+	// LFO1 Key Trigger
+	{ 0x30,	1,  1, 0x1000323b,	    0,		0,	      1	},
+	{ -1 }
+};
+
+static struct controller juno_106_3[] = {
+	/* R	S   L	Sysex Add    CTL Add	    Min		Max */
+	// LFO1 Rate
+	{ 0x00,	1,  0, 0x10003339,	    0,		0,	    127	},
+	// Vibrato Rate
+	{ 0x10,	1,  0, 0x10002318,	    0,		0,	    127	},
+	// Vibrato Delay
+	{ 0x01,	1,  0, 0x1000231a,	    0,		0,	    127	},
+	// Vibrato Depth
+	{ 0x11,	1,  0, 0x10002319,	    0,		0,	    127	},
+	// LFO1 TVF Depth Offset
+	{ 0x02,	1,  0, 0x1000333d,	    0,		1,	    127	},
+	// TVF Env Depth Offset
+	{ 0x03,	1,  0, 0x1000331a,	    0,		1,	    127	},
+	// TVF Cutoff Keyfolow Offset
+	{ 0x12,	1,  0, 0x10003315,	    0,	       44,	     84	},
+	// Filter Type
+	{ 0x13,	1,  0, 0x10003313,	    0,	        0,	      4	},
+	// ADSR
+	{ 0x04,	1,  0, 0x10003332,	    0,		0,	    127,
+							juno_adsr_callback},
+	{ 0x05,	1,  0, 0x10003334,	    0,		0,	    127,
+							juno_adsr_callback},
+	{ 0x06,	1,  0, 0x10003338,	    0,		0,	    127,
+							juno_adsr_callback},
+	{ 0x07,	1,  0, 0x10003335,	    0,		0,	    127,
+							juno_adsr_callback},
+	{ 0x04,	1,  0, 0x10003320,	    0,		0,	    127,
+							juno_adsr_callback},
+	{ 0x05,	1,  0, 0x10003322,	    0,		0,	    127,
+							juno_adsr_callback},
+	{ 0x06,	1,  0, 0x10003327,	    0,		0,	    127,
+							juno_adsr_callback},
+	{ 0x07,	1,  0, 0x10003323,	    0,		0,	    127,
+							juno_adsr_callback},
+	// Cutoff
+	{ 0x14,	1,  0, 0x10003314,	    0,	        1,	    127	},
+	// Resonance
+	{ 0x15,	1,  0, 0x10003318,	    0,	        0,	    127	},
+	// Pitch Bend Sens
+	{ 0x16,	1,  0, 0x1000230f,	    0,	        0,	     24	},
+	// Portamento Time
+	{ 0x17,	1,  0, 0x10002311,	    0,	        0,	    127	},
+	// Portamento Switch
+	{ 0x37,	1,  1, 0x10002310,	    0,		0,	      1	},
+	// Mono/Poly Switch
+	{ 0x36,	1,  1, 0x1000230d,	    0,		0,	      1	},
+	// Legato Switch
+	{ 0x35,	1,  1, 0x1000230e,	    0,		0,	      1	},
+	// LFO1 Key Trigger
+	{ 0x30,	1,  1, 0x1000333b,	    0,		0,	      1	},
+	{ -1 }
+};
+
+static struct controller super_filter[] = {
+	/* R	S   L	Sysex Add    CTL Add	    Min		Max */
+	// LFO1 Rate
+	{ 0x00,	1,  0, 0x10003339,	    0,		0,	    127	},
+	// Vibrato Rate
+	{ 0x10,	1,  0, 0x10002318,	    0,		0,	    127	},
+	// Vibrato Delay
+	{ 0x01,	1,  0, 0x1000231a,	    0,		0,	    127	},
+	// Vibrato Depth
+	{ 0x11,	1,  0, 0x10002319,	    0,		0,	    127	},
+	// LFO1 TVF Depth Offset
+	{ 0x02,	1,  0, 0x1000333d,	    0,		1,	    127	},
+	// TVF Env Depth Offset
+	{ 0x03,	1,  0, 0x1000331a,	    0,		1,	    127	},
+	// TVF Cutoff Keyfolow Offset
+	{ 0x12,	1,  0, 0x10003315,	    0,	       44,	     84	},
+	// Filter Type
+	{ 0x13,	1,  0, 0x10003313,	    0,	        0,	      4	},
+	// ADSR
+	{ 0x04,	1,  0, 0x10003332,	    0,		0,	    127,
+							juno_adsr_callback},
+	{ 0x05,	1,  0, 0x10003334,	    0,		0,	    127,
+							juno_adsr_callback},
+	{ 0x06,	1,  0, 0x10003338,	    0,		0,	    127,
+							juno_adsr_callback},
+	{ 0x07,	1,  0, 0x10003335,	    0,		0,	    127,
+							juno_adsr_callback},
+	{ 0x04,	1,  0, 0x10003320,	    0,		0,	    127,
+							juno_adsr_callback},
+	{ 0x05,	1,  0, 0x10003322,	    0,		0,	    127,
+							juno_adsr_callback},
+	{ 0x06,	1,  0, 0x10003327,	    0,		0,	    127,
+							juno_adsr_callback},
+	{ 0x07,	1,  0, 0x10003323,	    0,		0,	    127,
+							juno_adsr_callback},
+	// Cutoff
+	{ 0x14,	1,  0, 0x10003314,	    0,	        1,	    127	},
+	// Resonance
+	{ 0x15,	1,  0, 0x10003318,	    0,	        0,	    127	},
+	// Pitch Bend Sens
+	{ 0x16,	1,  0, 0x1000230f,	    0,	        0,	     24	},
+	// Portamento Time
+	{ 0x17,	1,  0, 0x10002311,	    0,	        0,	    127	},
+	// Portamento Switch
+	{ 0x37,	1,  1, 0x10002310,	    0,		0,	      1	},
+	// Mono/Poly Switch
+	{ 0x36,	1,  1, 0x1000230d,	    0,		0,	      1	},
+	// Legato Switch
+	{ 0x35,	1,  1, 0x1000230e,	    0,		0,	      1	},
+	// LFO1 Key Trigger
+	{ 0x30,	1,  1, 0x1000333b,	    0,		0,	      1	},
 	{ -1 }
 };
 
@@ -385,6 +610,29 @@ static struct controller solo_synth2[] = {
 	{ -1 }
 };
 
+void solo_synth_note1(unsigned char note) {
+	// OSC1, Coarse Tune
+	libgieditor_send_sysex_value(0x4000002,
+		libgieditor_get_sysex_size(0x4000002), note);
+}
+
+void solo_synth_note2(unsigned char note) {
+	// OSC2, Coarse Tune
+	libgieditor_send_sysex_value(0x4000006,
+		libgieditor_get_sysex_size(0x4000006), note);
+}
+
+static note_forwarder get_current_note_forwarder(void) {
+	switch (current_control_set) {
+	    case 0x26:
+		return solo_synth_note1;
+	    case 0x27:
+		return solo_synth_note2;
+	    default:
+		return NULL;
+	}
+}
+
 static struct controller *get_current_controller(void) {
 	switch (current_control_set) {
 	    case 0x26:
@@ -392,7 +640,13 @@ static struct controller *get_current_controller(void) {
 	    case 0x27:
 		return solo_synth2;
 	    case 0x20:
-		return juno_106;
+		return juno_106_0;
+	    case 0x21:
+		return juno_106_1;
+	    case 0x22:
+		return juno_106_2;
+	    case 0x23:
+		return juno_106_3;
 	    default:
 		return NULL;
 	}
@@ -523,6 +777,32 @@ unknown_type:
 	return 0;
 }
 
+static void *process_one_note(void *dummy) {
+	Midictl_list cur_midictl;
+	note_forwarder cur_forwarder;
+
+	while(1) {
+	    pthread_mutex_lock(&midi_lock);
+
+	    while (midictl_note_list == NULL) {
+		pthread_cond_wait(&note_data_ready, &midi_lock);
+	    }
+
+	    cur_midictl = midictl_note_list;
+	    midictl_note_list = midictl_note_list->next;
+
+	    pthread_mutex_unlock(&midi_lock);
+
+	    cur_forwarder = get_current_note_forwarder();
+
+	    if (cur_forwarder) cur_forwarder(cur_midictl->control);
+
+	    free(cur_midictl);
+	}
+
+	return dummy;
+}
+
 static void signal_handler(int unused) {
 	if (libgieditor_close()) {
 		printf("Error closing libgieditor\n");
@@ -558,6 +838,7 @@ wait:
 
 int main(void) {
 	pthread_t blink_thread;
+	pthread_t note_thread;
 	if (libgieditor_init(CLIENT_OUT_NAME,
 				LIBGIEDITOR_WRITE | LIBGIEDITOR_READ) < 0) {
             fprintf(stderr, "Library initialisation failed, aborting\n");
@@ -567,5 +848,6 @@ int main(void) {
 	jack_init(CLIENT_IN_NAME);
 	signal(SIGINT, signal_handler);
 	pthread_create(&blink_thread, NULL, blinker, NULL);
+	pthread_create(&note_thread, NULL, process_one_note, NULL);
 	while (1) process_one_control();
 }
