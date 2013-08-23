@@ -53,5 +53,6 @@ enum {
 };
 
 enum {
-	VIEW_INPUT
+	VIEW_CHANNEL,
+	ACK_CHANNEL
 };

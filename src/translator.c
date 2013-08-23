@@ -236,6 +236,11 @@ struct controller {
 
 typedef void (*note_forwarder)(unsigned char note);
 
+static void update_states(void);
+static void update_states_cb(struct controller *dummy) {
+	update_states();
+}
+
 #define NUM_TO_COPY 8
 static void juno_adsr_callback(struct controller *cur_controller) {
 	int i;
@@ -492,55 +497,47 @@ static struct controller juno_106_3[] = {
 
 static struct controller super_filter[] = {
 	/* R	S   L	Sysex Add    CTL Add	    Min		Max */
-	// LFO1 Rate
-	{ 0x00,	1,  0, 0x10003339,	    0,		0,	    127	},
-	// Vibrato Rate
-	{ 0x10,	1,  0, 0x10002318,	    0,		0,	    127	},
-	// Vibrato Delay
-	{ 0x01,	1,  0, 0x1000231a,	    0,		0,	    127	},
-	// Vibrato Depth
-	{ 0x11,	1,  0, 0x10002319,	    0,		0,	    127	},
-	// LFO1 TVF Depth Offset
-	{ 0x02,	1,  0, 0x1000333d,	    0,		1,	    127	},
-	// TVF Env Depth Offset
-	{ 0x03,	1,  0, 0x1000331a,	    0,		1,	    127	},
-	// TVF Cutoff Keyfolow Offset
-	{ 0x12,	1,  0, 0x10003315,	    0,	       44,	     84	},
-	// Filter Type
-	{ 0x13,	1,  0, 0x10003313,	    0,	        0,	      4	},
-	// ADSR
-	{ 0x04,	1,  0, 0x10003332,	    0,		0,	    127,
-							juno_adsr_callback},
-	{ 0x05,	1,  0, 0x10003334,	    0,		0,	    127,
-							juno_adsr_callback},
-	{ 0x06,	1,  0, 0x10003338,	    0,		0,	    127,
-							juno_adsr_callback},
-	{ 0x07,	1,  0, 0x10003335,	    0,		0,	    127,
-							juno_adsr_callback},
-	{ 0x04,	1,  0, 0x10003320,	    0,		0,	    127,
-							juno_adsr_callback},
-	{ 0x05,	1,  0, 0x10003322,	    0,		0,	    127,
-							juno_adsr_callback},
-	{ 0x06,	1,  0, 0x10003327,	    0,		0,	    127,
-							juno_adsr_callback},
-	{ 0x07,	1,  0, 0x10003323,	    0,		0,	    127,
-							juno_adsr_callback},
-	// Cutoff
-	{ 0x14,	1,  0, 0x10003314,	    0,	        1,	    127	},
-	// Resonance
-	{ 0x15,	1,  0, 0x10003318,	    0,	        0,	    127	},
-	// Pitch Bend Sens
-	{ 0x16,	1,  0, 0x1000230f,	    0,	        0,	     24	},
-	// Portamento Time
-	{ 0x17,	1,  0, 0x10002311,	    0,	        0,	    127	},
-	// Portamento Switch
-	{ 0x37,	1,  1, 0x10002310,	    0,		0,	      1	},
-	// Mono/Poly Switch
-	{ 0x36,	1,  1, 0x1000230d,	    0,		0,	      1	},
-	// Legato Switch
-	{ 0x35,	1,  1, 0x1000230e,	    0,		0,	      1	},
-	// LFO1 Key Trigger
-	{ 0x30,	1,  1, 0x1000333b,	    0,		0,	      1	},
+	// LFO Rate
+	{ 0x00,	1,  0, 0x10000835,	    0,	    32768,	  32789 },
+	// Filter type
+	{ 0x44,	1,  0, 0x10000811,	    0,	    32768,	  32768,
+							    update_states_cb },
+	{ 0x46,	1,  1, 0x10000811,	    0,	    32769,	  32769,
+							    update_states_cb },
+	{ 0x45,	1,  1, 0x10000811,	    0,	    32770,	  32770,
+							    update_states_cb },
+	{ 0x47,	1,  1, 0x10000811,	    0,	    32771,	  32771,
+							    update_states_cb },
+	// Filter slope
+	{ 0x33,	1,  0, 0x10000815,	    0,	    32768,	  32768,
+							    update_states_cb },
+	{ 0x43,	1,  0, 0x10000815,	    0,	    32769,	  32769,
+							    update_states_cb },
+	{ 0x34,	1,  0, 0x10000815,	    0,	    32770,	  32770,
+							    update_states_cb },
+	// Filter Cutoff
+	{ 0x14,	1,  0, 0x10000819,	    0,	    32768,	  32895 },
+	// Filter Resonance
+	{ 0x15,	1,  0, 0x1000081d,	    0,	    32768,	  32895 },
+	// Filter Gain
+	{ 0x10,	1,  0, 0x10000821,	    0,	    32768,	  32780 },
+	// Modulation Switch
+	{ 0x30,	1,  1, 0x10000825,	    0,	    32768,	  32769 },
+	// LFO Wave
+	{ 0x32,	1,  0, 0x10000829,	    0,	    32768,	  32768,
+							    update_states_cb },
+	{ 0x31,	1,  0, 0x10000829,	    0,	    32769,	  32769,
+							    update_states_cb },
+	{ 0x40,	1,  0, 0x10000829,	    0,	    32770,	  32770,
+							    update_states_cb },
+	{ 0x41,	1,  0, 0x10000829,	    0,	    32771,	  32771,
+							    update_states_cb },
+	{ 0x42,	1,  0, 0x10000829,	    0,	    32772,	  32772,
+							    update_states_cb },
+	// LFO Depth
+	{ 0x02,	1,  0, 0x10000839,	    0,	    32768,	  32895 },
+	// LFO attack
+	{ 0x04,	1,  0, 0x1000083d,	    0,	    32768,	  32895 },
 	{ -1 }
 };
 
@@ -647,6 +644,8 @@ static struct controller *get_current_controller(void) {
 		return juno_106_2;
 	    case 0x23:
 		return juno_106_3;
+	    case 0x24:
+		return super_filter;
 	    default:
 		return NULL;
 	}
@@ -701,7 +700,6 @@ static void update_states(void) {
 	int retval;
 	struct controller *cur_controller;
 	
-	reset_controller();
 	cur_controller = get_current_controller();
 	if (!cur_controller) return;
 
@@ -720,14 +718,17 @@ static void update_states(void) {
 		if (retval < 0) goto ignore;
 		sysex_val = libgieditor_get_sysex_value(data, sysex_size);
 
-		cur_controller->state = 127 *
+		if (cur_controller->max_value == cur_controller->min_value) {
+		    cur_controller->state = 
+			    (sysex_val - cur_controller->min_value) ? 0 : 127;
+		} else {
+		    cur_controller->state = 127 *
 			(sysex_val - cur_controller->min_value) / (float)
 			(cur_controller->max_value - cur_controller->min_value);
+		}
 
 		free(data);
 	    }
-
-	    send_one_midiled(cur_controller->respond_to, cur_controller->state);
 ignore:
 	    cur_controller++;
 	}
@@ -758,6 +759,7 @@ static int process_one_control(void) {
 		current_control_set = cur_midictl->control;
 		send_one_midiled(current_control_set, 0x7f);
 		if (changed) {
+		    reset_controller();
 		    update_states();
 		    printf("Current control set %i\n", current_control_set);
 		}
@@ -822,8 +824,11 @@ static void *blinker(void *dummy) {
 	    while (cur_controller->respond_to != -1) {
 		if (control_type[cur_controller->respond_to/16] != CTL_BUTTON)
 		    goto next_controller;
-		if (cur_controller->state > 0x40)
+		if (cur_controller->state > 0x40) {
+		    send_one_midiled(cur_controller->respond_to,
+				    cur_controller->state);
 		    goto next_controller;
+		}
 		pthread_mutex_lock(&midi_lock);
 		send_one_midiled(cur_controller->respond_to, val);
 		pthread_mutex_unlock(&midi_lock);

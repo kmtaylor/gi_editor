@@ -79,7 +79,7 @@ ISR(PCINT0_vect) {
 static void transmit_view(void) {
 	struct control_change *cmd = (struct control_change *) tx_buf;
 	cmd->change_cmd = MIDI_CONTROL_CHANNEL;
-	cmd->channel = 0;
+	cmd->channel = VIEW_CHANNEL;
 
 	PCMSK0 |=  _BV(PCINT3);
 	busy_wait();
@@ -102,6 +102,7 @@ static void toggle_output(uint8_t channel, uint8_t wait) {
 }
 
 static void delta_measure(uint8_t *val_bytes) {
+	struct control_change *cmd = (struct control_change *) tx_buf;
 	int16_t val = 0, i;
 	val |= val_bytes[3] << 0;
 	val |= val_bytes[2] << 4;
@@ -128,6 +129,11 @@ static void delta_measure(uint8_t *val_bytes) {
 	view_set = 0;
 
 	sei();
+
+	cmd->change_cmd = MIDI_CONTROL_CHANNEL;
+	cmd->channel = ACK_CHANNEL;
+	cmd->val = 0x00;
+	send_packet();
 }
 
 static void process_command(uint8_t *command) {
