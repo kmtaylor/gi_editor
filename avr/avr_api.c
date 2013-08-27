@@ -128,5 +128,5 @@ void avr_delta_measure(int16_t val) {
 	cmd->cmd = DELTA_MEASURE;
 	set_arg_16(cmd, (uint16_t) val);
 	pad_tx_packet();
-	jack_sysex_send_event(AVR_SYSEX_BUF_SIZE, tx_buf);
+	jack_sysex_send_event_ack(AVR_SYSEX_BUF_SIZE, tx_buf);
 }

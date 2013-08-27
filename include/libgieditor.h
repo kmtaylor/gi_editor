@@ -79,6 +79,7 @@ typedef struct s_gi_patch {
 enum init_flags {
 	LIBGIEDITOR_READ		= 0x01,
 	LIBGIEDITOR_WRITE		= 0x02,
+	LIBGIEDITOR_ACK			= 0x04,
 };
 
 extern int libgieditor_init(const char *client_name, enum init_flags flags);

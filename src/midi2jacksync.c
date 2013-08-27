@@ -384,6 +384,7 @@ static int process_read_data(void) {
 
 	    KORG_START_BUTTON_PRESSED(cur_midictl) {
 		jack_transport_locate(jack_client, 0);
+		set_midiclk_measures(1);
 		avr_toggle_restart();
 		if (transport_status & TRANSPORT_RECORDING) {
 		    transport_status &= ~TRANSPORT_RECORDING;
@@ -472,7 +473,7 @@ int main(int argc, char **argv) {
 	    exit(1);
 	}
 	if (avr_api_init(CLIENT_CONTROLLER_NAME,
-				LIBGIEDITOR_READ | LIBGIEDITOR_WRITE) < 0 ) {
+				LIBGIEDITOR_ACK | LIBGIEDITOR_WRITE) < 0 ) {
 	    printf("Couldn't initialise avr interface.\n");
 	    exit(1);
 	}

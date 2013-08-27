@@ -27,17 +27,20 @@
 #include <jack/midiport.h>
 
 #include "libgieditor.h"
+#include "../avr/per_node.h"
 
 #define allocate(t, num) __common_allocate(sizeof(t) * num, "libgieditor")
 
 #define MAX_SYSEX_SIZE		    512
 #define MIDI_CMD_COMMON_SYSEX       0xf0
 #define MIDI_CMD_COMMON_SYSEX_END   0xf7
+#define ACK_CONTROL_CHANNEL	    0xB1
 
 typedef struct s_sysex_list *Sysex_list;
 struct s_sysex_list {
 	uint8_t		data[MAX_SYSEX_SIZE];
 	int		size;
+	int		ack_required;
 	Sysex_list	next;
 };
 
@@ -45,19 +48,21 @@ struct s_sysex_list {
 static Sysex_list sysex_in_list;
 static Sysex_list sysex_out_list;
 static int sysex_timeout;
+static int waiting_for_ack;
 
 static int sysex_timeout_loops;
 
 static jack_client_t *jack_client;
 static jack_port_t *midi_in_port;
+static jack_port_t *midi_ack_port;
 static jack_port_t *midi_out_port;
 
 static pthread_mutex_t midi_lock = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t read_data_ready = PTHREAD_COND_INITIALIZER;
 static pthread_cond_t write_data_ready = PTHREAD_COND_INITIALIZER;
 
-static void add_sysex_event(Sysex_list *global_sysex_list, uint8_t *data, 
-					    int size) {
+static void add_sysex_event_priv(Sysex_list *global_sysex_list, uint8_t *data, 
+					    int size, int ack_required) {
 	Sysex_list cur_sysex;
 	if (!*global_sysex_list) {
 	    *global_sysex_list = allocate(struct s_sysex_list, 1);
@@ -70,7 +75,18 @@ static void add_sysex_event(Sysex_list *global_sysex_list, uint8_t *data,
 	}
 	cur_sysex->next = NULL;
 	cur_sysex->size = size;
+	cur_sysex->ack_required = ack_required;
 	memcpy(cur_sysex->data, data, size);
+}
+
+static void add_sysex_event_ack(Sysex_list *global_sysex_list, uint8_t *data,
+					    int size) {
+	add_sysex_event_priv(global_sysex_list, data, size, 1);
+}
+
+static void add_sysex_event(Sysex_list *global_sysex_list, uint8_t *data,
+					    int size) {
+	add_sysex_event_priv(global_sysex_list, data, size, 0);
 }
 
 static void flush_sysex_list(Sysex_list *global_sysex_list) {
@@ -103,17 +119,17 @@ static int jack_callback(jack_nframes_t nframes, void *arg) {
 	    if (!sysex_out_list)
 		pthread_cond_signal(&write_data_ready);
 
-	    while (sysex_out_list) {
+	    while (sysex_out_list && !waiting_for_ack) {
 		cur_sysex = sysex_out_list;
 		sysex_out_list = sysex_out_list->next;
 		jack_midi_event_write(midi_out_buf, event_index++,
 				cur_sysex->data,
 				cur_sysex->size);
+		if (cur_sysex->ack_required) waiting_for_ack = 1;
 		free(cur_sysex);
 	    }
 	    event_index = 0;
 	}
-
 
 	if (midi_in_port) {
 	    void *midi_in_buf = jack_port_get_buffer(midi_in_port, nframes);
@@ -126,6 +142,19 @@ static int jack_callback(jack_nframes_t nframes, void *arg) {
 		    add_sysex_event(&sysex_in_list, jack_midi_event.buffer,
 				    jack_midi_event.size);
 		    pthread_cond_signal(&read_data_ready);
+		}
+	    }
+	    event_index = 0;
+	}
+
+	if (midi_ack_port) {
+	    void *midi_ack_buf = jack_port_get_buffer(midi_ack_port, nframes);
+
+	    while (jack_midi_event_get(&jack_midi_event, midi_ack_buf, 
+					event_index++) == 0) {
+		if (( jack_midi_event.buffer[0] == ACK_CONTROL_CHANNEL ) &&
+		    ( jack_midi_event.buffer[1] == ACK_CHANNEL )) {
+			waiting_for_ack = 0;
 		}
 	    }
 	}
@@ -165,6 +194,13 @@ int jack_sysex_init(const char *client_name, int timeout_time,
 	    if (!midi_out_port) return -1;
 	}
 	
+	if (flags & LIBGIEDITOR_ACK) {
+	    midi_ack_port = jack_port_register(jack_client, "midi_ack_in",
+			JACK_DEFAULT_MIDI_TYPE,
+			JackPortIsInput | JackPortIsTerminal, 0);
+	    if (!midi_ack_port) return -1;
+	}
+	
 	jack_set_process_callback(jack_client, jack_callback, 0);
 
 	if (jack_activate(jack_client)) return -1;
@@ -178,12 +214,20 @@ int jack_sysex_close(void) {
 	    jack_port_unregister(jack_client, midi_in_port);
 	if (midi_out_port)
 	    jack_port_unregister(jack_client, midi_out_port);
+	if (midi_ack_port)
+	    jack_port_unregister(jack_client, midi_ack_port);
 	return jack_client_close(jack_client);
 }
 
 void jack_sysex_send_event(uint32_t sysex_size, uint8_t *data) {
 	pthread_mutex_lock(&midi_lock);
 	add_sysex_event(&sysex_out_list, data, sysex_size); 
+	pthread_mutex_unlock(&midi_lock);
+}
+
+void jack_sysex_send_event_ack(uint32_t sysex_size, uint8_t *data) {
+	pthread_mutex_lock(&midi_lock);
+	add_sysex_event_ack(&sysex_out_list, data, sysex_size); 
 	pthread_mutex_unlock(&midi_lock);
 }
 

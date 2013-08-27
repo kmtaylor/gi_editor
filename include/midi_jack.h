@@ -28,3 +28,4 @@ extern void jack_sysex_wait_write(void);
 extern void jack_flush_sysex_in_list(void);
 extern int jack_sysex_listen_event(uint8_t **data);
 extern void jack_sysex_send_event(uint32_t sysex_size, uint8_t *data);
+extern void jack_sysex_send_event_ack(uint32_t sysex_size, uint8_t *data);

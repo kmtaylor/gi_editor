@@ -296,7 +296,14 @@ static struct controller juno_106_0[] = {
 	// TVF Cutoff Keyfolow Offset
 	{ 0x12,	1,  0, 0x10003015,	    0,	       44,	     84	},
 	// Filter Type
-	{ 0x13,	1,  0, 0x10003013,	    0,	        0,	      4	},
+	{ 0x44,	1,  1, 0x10003013,	    0,	        0,	      1,
+							    update_states_cb },
+	{ 0x46,	1,  1, 0x10003013,	    0,	        2,	      2,
+							    update_states_cb },
+	{ 0x45,	1,  1, 0x10003013,	    0,	        3,	      3,
+							    update_states_cb },
+	{ 0x47,	1,  1, 0x10003013,	    0,	        4,	      4,
+							    update_states_cb },
 	// ADSR
 	{ 0x04,	1,  0, 0x10003032,	    0,		0,	    127,
 							juno_adsr_callback},
@@ -350,7 +357,14 @@ static struct controller juno_106_1[] = {
 	// TVF Cutoff Keyfolow Offset
 	{ 0x12,	1,  0, 0x10003115,	    0,	       44,	     84	},
 	// Filter Type
-	{ 0x13,	1,  0, 0x10003113,	    0,	        0,	      4	},
+	{ 0x44,	1,  1, 0x10003113,	    0,	        0,	      1,
+							    update_states_cb },
+	{ 0x46,	1,  1, 0x10003113,	    0,	        2,	      2,
+							    update_states_cb },
+	{ 0x45,	1,  1, 0x10003113,	    0,	        3,	      3,
+							    update_states_cb },
+	{ 0x47,	1,  1, 0x10003113,	    0,	        4,	      4,
+							    update_states_cb },
 	// ADSR
 	{ 0x04,	1,  0, 0x10003132,	    0,		0,	    127,
 							juno_adsr_callback},
@@ -404,7 +418,14 @@ static struct controller juno_106_2[] = {
 	// TVF Cutoff Keyfolow Offset
 	{ 0x12,	1,  0, 0x10003215,	    0,	       44,	     84	},
 	// Filter Type
-	{ 0x13,	1,  0, 0x10003213,	    0,	        0,	      4	},
+	{ 0x44,	1,  1, 0x10003213,	    0,	        0,	      1,
+							    update_states_cb },
+	{ 0x46,	1,  1, 0x10003213,	    0,	        2,	      2,
+							    update_states_cb },
+	{ 0x45,	1,  1, 0x10003213,	    0,	        3,	      3,
+							    update_states_cb },
+	{ 0x47,	1,  1, 0x10003113,	    0,	        4,	      4,
+							    update_states_cb },
 	// ADSR
 	{ 0x04,	1,  0, 0x10003232,	    0,		0,	    127,
 							juno_adsr_callback},
@@ -458,7 +479,14 @@ static struct controller juno_106_3[] = {
 	// TVF Cutoff Keyfolow Offset
 	{ 0x12,	1,  0, 0x10003315,	    0,	       44,	     84	},
 	// Filter Type
-	{ 0x13,	1,  0, 0x10003313,	    0,	        0,	      4	},
+	{ 0x44,	1,  1, 0x10003313,	    0,	        0,	      1,
+							    update_states_cb },
+	{ 0x46,	1,  1, 0x10003313,	    0,	        2,	      2,
+							    update_states_cb },
+	{ 0x45,	1,  1, 0x10003313,	    0,	        3,	      3,
+							    update_states_cb },
+	{ 0x47,	1,  1, 0x10003313,	    0,	        4,	      4,
+							    update_states_cb },
 	// ADSR
 	{ 0x04,	1,  0, 0x10003332,	    0,		0,	    127,
 							juno_adsr_callback},
@@ -725,6 +753,8 @@ static void update_states(void) {
 		    cur_controller->state = 127 *
 			(sysex_val - cur_controller->min_value) / (float)
 			(cur_controller->max_value - cur_controller->min_value);
+		    if (cur_controller->state > 127)
+			    cur_controller->state = 0;
 		}
 
 		free(data);
