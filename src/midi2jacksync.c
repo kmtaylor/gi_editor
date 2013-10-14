@@ -416,8 +416,10 @@ static int process_read_data(void) {
 	    KORG_BACK_BUTTON_PRESSED(cur_midictl) {
 		jack_transport_query(jack_client, &pos);
 		measure = measure_from_frame(&pos);
-		frame = frame_from_measure(&pos, --measure);
-		jack_transport_locate(jack_client, frame);
+		if (measure != 1) {
+		    frame = frame_from_measure(&pos, --measure);
+		    jack_transport_locate(jack_client, frame);
+		}
 	    }
 
 	    KORG_FORWARD_BUTTON_PRESSED(cur_midictl) {

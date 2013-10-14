@@ -13,16 +13,14 @@ First, the midi address database needs to be built.
 This requires the document entitled: "JUNO-Gi MIDI Implementation", which is
 available from the Roland website.
 
-Place this file in the /manual_parse directory, named as midi_manual.pdf
+Place this file in the source directory, named as midi_manual.pdf
 
-gi_editor/manual_parse$ make
+Then the usual build commands:
 
-This will build midi_addresses.c needed by libgieditor.
-Once this has been done once, it need not be ever done again.
-
-Then return to the top level directory and type make:
-
-gi_editor$ make
+autoreconf --install (Use this if you don't have a configure script yet)
+./configure
+make
+make install
 
 This will build:
 read_midi	- Lists SysEx midi events and describes them according to the
@@ -34,7 +32,8 @@ sysex_explorer	- Patch editing, loading and unloading. You will probably want
 		  read from).
 		  Another file location #define is LOGFILE in log.h
 translator	- A tool to map midi controllers to Juno-Gi specific SysEx
-		  instructions.
+		  instructions. At this point it works with the Korg
+		  nanoKONTROL2.
 midi2jacksync	- A handy tool that is useful for syncing Jack transport to the
 		  Juno-Gi's digital recorder.
 
@@ -51,9 +50,3 @@ alsa kernel driver. Please see my post on Rolandclan regarding this.
 Having said that, if you want to use midi2jacksync, you will require a midi to
 USB converter cable. I use the Roland UM-ONE. This is required because the
 Juno-Gi does not output Midi Clock on the in-built USB interface.
-
-Roadmap:
-
-1. Write patch loading, unloading and editing interface. (Complete)
-2. Write midi mapper, mapping arbitrary midi instructions to Juno Gi sysex
-   events. (Complete)
