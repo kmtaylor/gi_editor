@@ -30,6 +30,7 @@
 #include <jack/midiport.h>
 
 #include "libgieditor.h"
+#include "midi_addresses.h"
 
 #define CLIENT_OUT_NAME "ControlTranslatorSysex"
 #define CLIENT_IN_NAME "ControlTranslatorCTL"
@@ -194,6 +195,14 @@ static void reset_controller(void) {
 	korgnano_reset();
 }
 
+static void reset_function(void) {
+	korgnano_func_reset();
+}
+
+static int button_value(uint8_t val) {
+	return korg_val_from_buttons(val);
+}
+
 static int jack_close(void) {
 	pthread_mutex_lock(&midi_lock);
 	reset_controller();
@@ -239,6 +248,87 @@ typedef void (*note_forwarder)(unsigned char note);
 static void update_states(void);
 static void update_states_cb(struct controller *dummy) {
 	update_states();
+}
+
+#define NUM_LAYERS 4
+#define NUM_PARTS 16
+static void copy_paste(struct controller *cur_controller, int reset) {
+	static enum {INIT_LAYER, LAYER, INIT_PART, PART} state;
+	static int layer, part;
+	int val = button_value(cur_controller->respond_to) + 1;
+	int failed, dummy;
+
+	if (reset) {
+	    state = INIT_LAYER;
+	    libgieditor_flush_copy_data(&dummy);
+	    return;
+	}
+	    
+	switch (state) {
+	    case INIT_LAYER:
+		if (val <= NUM_LAYERS)
+		    cur_controller->state = 0;
+		else
+		    cur_controller->state = 2; // Tells blinker not to flash
+		if (val == NUM_PARTS)
+		    state = LAYER;
+		break;
+	    case LAYER:
+		if (val > NUM_LAYERS) {
+		    cur_controller->state = 2;
+		    break;
+		}
+		layer = val;	
+		/* Give up the lock otherwise we might wait too long */
+		pthread_mutex_unlock(&midi_lock);
+		failed = libgieditor_copy_class(&libgieditor_top_midi_class,
+				0x10000000, &dummy);
+		pthread_mutex_lock(&midi_lock);
+
+		if (!failed) {
+		    state = INIT_PART;
+		    update_states();
+		} else {
+		    printf("Copy failed. Error: %i\n", failed);
+		    cur_controller->state = 0;
+		}
+		break;
+	    case INIT_PART:
+		cur_controller->state = 0;
+		if (val == layer)
+		    cur_controller->state = 0x7f;
+		if (val == NUM_PARTS)
+		    state = PART;
+		break;
+	    case PART:
+		part = val;
+		/* Give up the lock otherwise we might wait too long */
+		pthread_mutex_unlock(&midi_lock);
+		printf("Pasting Layer %i to Part %i\n", layer, part);
+		failed = libgieditor_paste_layer_to_part(
+				&libgieditor_top_midi_class,
+				0x18000000,
+				&dummy, layer, part);
+		pthread_mutex_lock(&midi_lock);
+		
+		if (!failed) {
+		    state = INIT_LAYER;
+		    reset_function();
+		    update_states();
+		} else {
+		    printf("Paste failed. Error: %i\n", failed);
+		    cur_controller->state = 0;
+		}
+		break;
+	}
+}
+
+static void copy_paste_cb(struct controller *cur_controller) {
+	copy_paste(cur_controller, 0);
+}
+
+static void flush_copy_paste(void) {
+	copy_paste(NULL, 1);
 }
 
 #define NUM_TO_COPY 8
@@ -548,7 +638,7 @@ static struct controller super_filter[] = {
 	// Filter Resonance
 	{ 0x15,	1,  0, 0x1000081d,	    0,	    32768,	  32895 },
 	// Filter Gain
-	{ 0x10,	1,  0, 0x10000821,	    0,	    32768,	  32780 },
+	{ 0x13,	1,  0, 0x10000821,	    0,	    32768,	  32780 },
 	// Modulation Switch
 	{ 0x30,	1,  1, 0x10000825,	    0,	    32768,	  32769 },
 	// LFO Wave
@@ -591,12 +681,20 @@ static struct controller solo_synth1[] = {
 	{ 0x03,	1,  0, 0x4000008,	    0,		0,	    127	},
 	// OSC Sync Switch
 	{ 0x40,	1,  1, 0x4000009,	    0,		0,	      1	},
-	// Filter Type
 	{ 0x15,	1,  0, 0x400000a,	    0,		0,	      4	},
+	// Filter Type
+        { 0x44, 1,  1, 0x400000a,          0,          0,            1,
+                                                            update_states_cb },
+        { 0x46, 1,  1, 0x400000a,          0,          2,            2,
+                                                            update_states_cb },
+        { 0x45, 1,  1, 0x400000a,          0,          3,            3,
+                                                            update_states_cb },
+        { 0x47, 1,  1, 0x400000a,          0,          4,            4,
+                                                            update_states_cb },
 	// Cutoff
-	{ 0x17,	1,  0, 0x400000b,	    0,		0,	    127	},
+	{ 0x14,	1,  0, 0x400000b,	    0,		0,	    127	},
 	// Resonance
-	{ 0x16,	1,  0, 0x400000c,	    0,		0,	    127	},
+	{ 0x15,	1,  0, 0x400000c,	    0,		0,	    127	},
 	// Level
 	{ 0x07,	1,  0, 0x400000d,	    0,		0,	    127	},
 	// Chorus Send Level
@@ -620,12 +718,19 @@ static struct controller solo_synth2[] = {
 	{ 0x12,	1,  0, 0x4000014,	    0,		0,	    127	},
 	// Range
 	{ 0x10,	1,  0, 0x4000015,	    0,		0,	      2	},
-	// Filter Type
-	{ 0x15,	1,  0, 0x400000a,	    0,		0,	      4	},
+        // Filter Type
+        { 0x44, 1,  1, 0x400000a,          0,          0,            1,
+                                                            update_states_cb },
+        { 0x46, 1,  1, 0x400000a,          0,          2,            2,
+                                                            update_states_cb },
+        { 0x45, 1,  1, 0x400000a,          0,          3,            3,
+                                                            update_states_cb },
+        { 0x47, 1,  1, 0x400000a,          0,          4,            4,
+                                                            update_states_cb },
 	// Cutoff
-	{ 0x17,	1,  0, 0x400000b,	    0,		0,	    127	},
+	{ 0x14,	1,  0, 0x400000b,	    0,		0,	    127	},
 	// Resonance
-	{ 0x16,	1,  0, 0x400000c,	    0,		0,	    127	},
+	{ 0x15,	1,  0, 0x400000c,	    0,		0,	    127	},
 	// Level
 	{ 0x07,	1,  0, 0x400000d,	    0,		0,	    127	},
 	// Chorus Send Level
@@ -635,16 +740,70 @@ static struct controller solo_synth2[] = {
 	{ -1 }
 };
 
+static struct controller studio[] = {
+	/* R	S   L	Sysex Add    CTL Add	    Min		Max */
+	// Track Volume
+	{ 0x10,	1,  0, 0x18002009,	    0,		0,	    127	},
+	{ 0x11,	1,  0, 0x18002109,	    0,		0,	    127	},
+	{ 0x12,	1,  0, 0x18002209,	    0,		0,	    127	},
+	{ 0x13,	1,  0, 0x18002309,	    0,		0,	    127	},
+	{ 0x14,	1,  0, 0x18002409,	    0,		0,	    127	},
+	{ 0x15,	1,  0, 0x18002509,	    0,		0,	    127	},
+	{ 0x16,	1,  0, 0x18002609,	    0,		0,	    127	},
+	{ 0x17,	1,  0, 0x18002709,	    0,		0,	    127	},
+	{ 0x00,	1,  0, 0x18002809,	    0,		0,	    127	},
+	{ 0x01,	1,  0, 0x18002909,	    0,		0,	    127	},
+	{ 0x02,	1,  0, 0x18002a09,	    0,		0,	    127	},
+	{ 0x03,	1,  0, 0x18002b09,	    0,		0,	    127	},
+	{ 0x04,	1,  0, 0x18002c09,	    0,		0,	    127	},
+	{ 0x05,	1,  0, 0x18002d09,	    0,		0,	    127	},
+	{ 0x06,	1,  0, 0x18002e09,	    0,		0,	    127	},
+	{ 0x07,	1,  0, 0x18002f09,	    0,		0,	    127	},
+        { 0x30,-1,  1,		0,          0,          0,            0,
+                                                            copy_paste_cb },
+        { 0x31,-1,  1,		0,          0,          0,            0,
+                                                            copy_paste_cb },
+        { 0x32,-1,  1,	        0,          0,          0,            0,
+                                                            copy_paste_cb },
+        { 0x33,-1,  1,		0,          0,          0,            0,
+                                                            copy_paste_cb },
+        { 0x34,-1,  1,		0,          0,          0,            0,
+                                                            copy_paste_cb },
+        { 0x35,-1,  1,		0,          0,          0,            0,
+                                                            copy_paste_cb },
+        { 0x36,-1,  1,	        0,          0,          0,            0,
+                                                            copy_paste_cb },
+        { 0x37,-1,  1,		0,          0,          0,            0,
+                                                            copy_paste_cb },
+        { 0x40,-1,  1,		0,          0,          0,            0,
+                                                            copy_paste_cb },
+        { 0x41,-1,  1,		0,          0,          0,            0,
+                                                            copy_paste_cb },
+        { 0x42,-1,  1,	        0,          0,          0,            0,
+                                                            copy_paste_cb },
+        { 0x43,-1,  1,		0,          0,          0,            0,
+                                                            copy_paste_cb },
+        { 0x44,-1,  1,		0,          0,          0,            0,
+                                                            copy_paste_cb },
+        { 0x45,-1,  1,		0,          0,          0,            0,
+                                                            copy_paste_cb },
+        { 0x46,-1,  1,	        0,          0,          0,            0,
+                                                            copy_paste_cb },
+        { 0x47,-1,  1,		0,          0,          0,            0,
+                                                            copy_paste_cb },
+	{ -1 }
+};
+
 void solo_synth_note1(unsigned char note) {
 	// OSC1, Coarse Tune
 	libgieditor_send_sysex_value(0x4000002,
-		libgieditor_get_sysex_size(0x4000002), note);
+		libgieditor_get_sysex_size(0x4000002), note - 20);
 }
 
 void solo_synth_note2(unsigned char note) {
 	// OSC2, Coarse Tune
 	libgieditor_send_sysex_value(0x4000006,
-		libgieditor_get_sysex_size(0x4000006), note);
+		libgieditor_get_sysex_size(0x4000006), note - 20);
 }
 
 static note_forwarder get_current_note_forwarder(void) {
@@ -674,6 +833,8 @@ static struct controller *get_current_controller(void) {
 		return juno_106_3;
 	    case 0x24:
 		return super_filter;
+	    case 0x25:
+		return studio;
 	    default:
 		return NULL;
 	}
@@ -705,11 +866,11 @@ static void translate_control(uint8_t control, uint8_t value) {
 			    cur_controller->min_value) / 127.0)) +
 			    cur_controller->min_value;
 
-	    if (cur_controller->is_sysex) {
+	    if (cur_controller->is_sysex > 0) {
 		libgieditor_send_sysex_value(cur_controller->sysex_addr,
 			libgieditor_get_sysex_size(cur_controller->sysex_addr),
 			send_value);
-	    } else {
+	    } else if (cur_controller->is_sysex == 0) {
 		send_one_midictl(cur_controller->ctl_addr, send_value);
 	    }
 
@@ -735,7 +896,7 @@ static void update_states(void) {
 	    if (control_type[cur_controller->respond_to/16] != CTL_BUTTON)
 		goto ignore;
 
-	    if (cur_controller->is_sysex) {
+	    if (cur_controller->is_sysex > 0) {
 		sysex_size = libgieditor_get_sysex_size(
 				cur_controller->sysex_addr);
 		/* Give up the lock otherwise we might wait too long */
@@ -758,6 +919,8 @@ static void update_states(void) {
 		}
 
 		free(data);
+	    } else if (cur_controller->is_sysex < 0) {
+		copy_paste_cb(cur_controller);
 	    }
 ignore:
 	    cur_controller++;
@@ -789,9 +952,10 @@ static int process_one_control(void) {
 		current_control_set = cur_midictl->control;
 		send_one_midiled(current_control_set, 0x7f);
 		if (changed) {
+		    flush_copy_paste();
 		    reset_controller();
 		    update_states();
-		    printf("Current control set %i\n", current_control_set);
+		    //printf("Current control set %i\n", current_control_set);
 		}
 		break;
 	    case CTL_BUTTON:
@@ -854,9 +1018,13 @@ static void *blinker(void *dummy) {
 	    while (cur_controller->respond_to != -1) {
 		if (control_type[cur_controller->respond_to/16] != CTL_BUTTON)
 		    goto next_controller;
+		if (cur_controller->is_sysex < 0 && cur_controller->state == 2)
+		    goto next_controller;
 		if (cur_controller->state > 0x40) {
+		    pthread_mutex_lock(&midi_lock);
 		    send_one_midiled(cur_controller->respond_to,
 				    cur_controller->state);
+		    pthread_mutex_unlock(&midi_lock);
 		    goto next_controller;
 		}
 		pthread_mutex_lock(&midi_lock);

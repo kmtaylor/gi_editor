@@ -12,6 +12,20 @@ static void korgnano_reset(void) {
 	send_one_midiled(0x2d, 0x00);
 }
 
+static void korgnano_func_reset(void) {
+	int j, i;
+        for (j = 0x30; j < 0x50; j += 0x10) {
+            for (i = 0; i < 8; i++) {
+                send_one_midiled(i + j, 0x00);
+            }
+        }
+}
+
+int korg_val_from_buttons(uint8_t button) {
+	if (button >= 0x30 && button < 0x38) return button - 0x30;
+	if (button >= 0x40 && button < 0x48) return button - 0x40 + 8;
+}
+
 #ifdef MIDI2JACKSYNC
 static void korg_update_leds(enum e_status cur_status) {
 	if (cur_status & TRANSPORT_RECORDING) {
