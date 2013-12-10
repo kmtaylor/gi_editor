@@ -41,6 +41,7 @@
 #define MIDI_CLOCK_CONT	    0xFB
 #define MIDI_CLOCK_STOP	    0xFC
 #define MIDI_CLOCK_TICK	    0xF8
+#define MIDI_SPP	    0xF2
 #define MIDI_CTL_MSG	    0xB0
 #define MIDI_CTL_CHANNEL    0
 #define MIDI_AVR_CHANNEL    1
@@ -51,9 +52,6 @@
     buf[0] = MIDI_CTL_MSG | MIDI_CTL_CHANNEL;				    \
     buf[CONTROL_OFFSET] = control;					    \
     buf[VALUE_OFFSET] = value
-#define RLTM_TO_BUFFER(buf, byte) \
-    buf[0] = byte
-
 #define allocate(t, num) __common_allocate(sizeof(t) * num, "midi2jacksync")
 
 typedef struct s_midictl_list *Midictl_list;
@@ -65,9 +63,15 @@ struct s_midictl_list {
 
 typedef struct s_midi_rltm_list *Midi_rltm_list;
 struct s_midi_rltm_list {
-	uint8_t		byte;
+	uint8_t		byte[3];
+	int		spp;
 	Midi_rltm_list	next;
 };
+
+static inline uint8_t *rltm_to_buffer(Midi_rltm_list rltm, int *length) {
+	*length = rltm->spp ? 3 : 1;
+	return rltm->byte;
+}
 
 static int tempo;
 static int do_sync;
@@ -111,7 +115,8 @@ static void add_midictl_event(Midictl_list *global_midictl_list, uint8_t *data,
 	cur_midictl->value = data[VALUE_OFFSET];
 }
 
-static void add_rltm_event(Midi_rltm_list *global_rltm_list, uint8_t byte) {
+static void __add_rltm_event(Midi_rltm_list *global_rltm_list,
+		uint8_t b1, uint8_t b2, uint8_t b3, int spp) {
 	Midi_rltm_list cur_rltm;
 	if (!*global_rltm_list) {
 	    *global_rltm_list = allocate(struct s_midi_rltm_list, 1);
@@ -123,7 +128,20 @@ static void add_rltm_event(Midi_rltm_list *global_rltm_list, uint8_t byte) {
 	    cur_rltm = cur_rltm->next;
 	}
 	cur_rltm->next = NULL;
-	cur_rltm->byte = byte;
+	cur_rltm->spp = spp;
+	cur_rltm->byte[0] = b1;
+	cur_rltm->byte[1] = b2;
+	cur_rltm->byte[2] = b3;
+}
+
+static void add_rltm_event(Midi_rltm_list *global_rltm_list, uint8_t byte) {
+	__add_rltm_event(global_rltm_list, byte, 0, 0, 0);
+}
+
+static void add_spp_event(Midi_rltm_list *global_rltm_list) {
+	__add_rltm_event(global_rltm_list, MIDI_SPP,
+			(midi_clock_count / 6) & 0x7f,
+			((midi_clock_count / 6) >> 7) & 0x7f, 1);
 }
 
 static unsigned long midiclk_from_ms(unsigned long ms) {
@@ -158,6 +176,8 @@ static int process_callback(jack_nframes_t nframes, void *arg) {
 	Midictl_list cur_midictl;
 	Midi_rltm_list cur_rltm;
 	uint8_t data[MIDI_CTL_SIZE];
+	uint8_t *buf;
+	int length;
 
 	pthread_mutex_lock(&midi_lock);
 
@@ -174,8 +194,8 @@ static int process_callback(jack_nframes_t nframes, void *arg) {
 	while (midi_rltm_list) {
 	    cur_rltm = midi_rltm_list;
 	    midi_rltm_list = midi_rltm_list->next;
-	    RLTM_TO_BUFFER(data, cur_rltm->byte);
-	    jack_midi_event_write(midi_rltm_buf, event_index++, data, 1);
+	    buf = rltm_to_buffer(cur_rltm, &length);
+	    jack_midi_event_write(midi_rltm_buf, event_index++, buf, length);
 	    free(cur_rltm);
 	}
 	
@@ -220,7 +240,7 @@ static int process_callback(jack_nframes_t nframes, void *arg) {
 }
 
 static int sync_callback(jack_transport_state_t state, jack_position_t *pos,
-		void *ard) {
+		void *arg) {
 	unsigned long jack_time_ms;
 
 	long jack_measure = measure_from_frame(pos);
@@ -240,6 +260,7 @@ static int sync_callback(jack_transport_state_t state, jack_position_t *pos,
 	pthread_mutex_lock(&midi_lock);
 	avr_delta_measure(jack_measure - midiclk_measures());
 	set_midiclk_measures(jack_measure);
+	add_spp_event(&midi_rltm_list);
 	pthread_mutex_unlock(&midi_lock);
 
 	return 1;
@@ -283,6 +304,9 @@ static void timebase_callback(jack_transport_state_t state,
 	    new_frame = device_time_ms * (pos->frame_rate / 1000);
 	    jack_transport_locate(jack_client, new_frame);
 	}
+
+	if (do_sync)
+	    pos->beats_per_minute = tempo;
 }
 
 static int jack_init(const char *client_name) {
