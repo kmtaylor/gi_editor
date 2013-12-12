@@ -36,7 +36,7 @@
 #define CLIENT_NAME "JackSyncer"
 #define CLIENT_CONTROLLER_NAME "JackSyncerAVR"
 
-#define JITTER_TOLERANCE 30
+#define JITTER_TOLERANCE 60
 
 #define MIDI_CLOCK_CONT	    0xFB
 #define MIDI_CLOCK_STOP	    0xFC
@@ -80,6 +80,7 @@ static int do_sync;
 static Midictl_list midictl_in_list;
 static Midictl_list midictl_led_list;
 static Midi_rltm_list midi_rltm_list;
+static Midi_rltm_list midi_spp_list;
 static int midi_clock_counting;
 static unsigned long midi_clock_count;
 enum e_status {
@@ -93,6 +94,7 @@ static jack_client_t *jack_client;
 static jack_port_t *midi_in_port;
 static jack_port_t *midi_led_port;
 static jack_port_t *midi_rltm_port;
+static jack_port_t *midi_spp_port;
 
 static pthread_mutex_t midi_lock = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t read_data_ready = PTHREAD_COND_INITIALIZER;
@@ -184,9 +186,11 @@ static int process_callback(jack_nframes_t nframes, void *arg) {
 	void *midi_in_buf = jack_port_get_buffer(midi_in_port, nframes);
 	void *midi_led_buf = jack_port_get_buffer(midi_led_port, nframes);
 	void *midi_rltm_buf = jack_port_get_buffer(midi_rltm_port, nframes);
+	void *midi_spp_buf = jack_port_get_buffer(midi_spp_port, nframes);
 
         jack_midi_clear_buffer(midi_led_buf);
         jack_midi_clear_buffer(midi_rltm_buf);
+        jack_midi_clear_buffer(midi_spp_buf);
 
 	if (!midictl_led_list)
 	    pthread_cond_signal(&write_data_ready);
@@ -196,6 +200,16 @@ static int process_callback(jack_nframes_t nframes, void *arg) {
 	    midi_rltm_list = midi_rltm_list->next;
 	    buf = rltm_to_buffer(cur_rltm, &length);
 	    jack_midi_event_write(midi_rltm_buf, event_index++, buf, length);
+	    free(cur_rltm);
+	}
+	
+        event_index = 0;
+
+	while (midi_spp_list) {
+	    cur_rltm = midi_spp_list;
+	    midi_spp_list = midi_spp_list->next;
+	    buf = rltm_to_buffer(cur_rltm, &length);
+	    jack_midi_event_write(midi_spp_buf, event_index++, buf, length);
 	    free(cur_rltm);
 	}
 	
@@ -242,6 +256,7 @@ static int process_callback(jack_nframes_t nframes, void *arg) {
 static int sync_callback(jack_transport_state_t state, jack_position_t *pos,
 		void *arg) {
 	unsigned long jack_time_ms;
+	double intpart;
 
 	long jack_measure = measure_from_frame(pos);
 	long measure_frame = frame_from_measure(pos, jack_measure);
@@ -253,14 +268,13 @@ static int sync_callback(jack_transport_state_t state, jack_position_t *pos,
 	 * otherwise, just ignore the sync request */
 	if (delta > 300) return 1;
 
-	printf("GI measure %li\n", midiclk_measures());
-	printf("Jack measure %li\n", jack_measure);
-	printf("Adjusting by %li measures\n", jack_measure - midiclk_measures());
-
 	pthread_mutex_lock(&midi_lock);
+	if (modf((midi_clock_count * 25 / (float) 2400), &intpart) > 0.5) {
+	    avr_delta_measure(1);
+	}
 	avr_delta_measure(jack_measure - midiclk_measures());
 	set_midiclk_measures(jack_measure);
-	add_spp_event(&midi_rltm_list);
+	add_spp_event(&midi_spp_list);
 	pthread_mutex_unlock(&midi_lock);
 
 	return 1;
@@ -327,7 +341,12 @@ static int jack_init(const char *client_name) {
 			JACK_DEFAULT_MIDI_TYPE,
 			JackPortIsOutput | JackPortIsTerminal, 0);
 	
-	if (!(midi_in_port && midi_led_port && midi_rltm_port)) return -1;
+	midi_spp_port = jack_port_register(jack_client, "midi_spp",
+			JACK_DEFAULT_MIDI_TYPE,
+			JackPortIsOutput | JackPortIsTerminal, 0);
+	
+	if (!(midi_in_port && midi_led_port &&
+				midi_rltm_port && midi_spp_port)) return -1;
 	
 	if (jack_set_process_callback(jack_client, process_callback, 0) < 0)
 		return -1;
@@ -378,6 +397,8 @@ static int jack_close(void) {
 	    jack_port_unregister(jack_client, midi_led_port);
 	if (midi_rltm_port)
 	    jack_port_unregister(jack_client, midi_rltm_port);
+	if (midi_spp_port)
+	    jack_port_unregister(jack_client, midi_spp_port);
 	return jack_client_close(jack_client);
 }
 
@@ -492,15 +513,17 @@ int main(int argc, char **argv) {
 	    printf("Midi clock tempo: %ibpm\n", tempo);
 	}
 
+	if (avr_api_init(CLIENT_CONTROLLER_NAME,
+				LIBGIEDITOR_ACK | LIBGIEDITOR_WRITE) < 0 ) {
+	    printf("Couldn't initialise avr interface.\n");
+	    exit(1);
+	}
+	/* Allow jack time to make connections before activating */
+	sleep(1);
 	if (jack_init(CLIENT_NAME) < 0) {
 	    printf("Couldn't initialise jack client.\n"
 		    "Check that jackd is running and there is no existing "
 		    "timebase master.\n");
-	    exit(1);
-	}
-	if (avr_api_init(CLIENT_CONTROLLER_NAME,
-				LIBGIEDITOR_ACK | LIBGIEDITOR_WRITE) < 0 ) {
-	    printf("Couldn't initialise avr interface.\n");
 	    exit(1);
 	}
 	signal(SIGINT, signal_handler);
