@@ -152,6 +152,7 @@ static void process_command(uint8_t *command) {
 }
 
 static void process_realtime(uint8_t val) {
+	if (val == MIDI_RLTM_START) toggle_output(PLAY_BUTTON, 0);
 	if (val == MIDI_RLTM_CONT) toggle_output(PLAY_BUTTON, 0);
 	if (val == MIDI_RLTM_STOP) toggle_output(STOP_BUTTON, 0);
 }

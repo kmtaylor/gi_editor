@@ -36,10 +36,11 @@
 #define CLIENT_NAME "JackSyncer"
 #define CLIENT_CONTROLLER_NAME "JackSyncerAVR"
 
-#define JITTER_TOLERANCE 60
+#define JITTER_TOLERANCE 40
 
 #define MIDI_CLOCK_CONT	    0xFB
 #define MIDI_CLOCK_STOP	    0xFC
+#define MIDI_CLOCK_START    0xFA
 #define MIDI_CLOCK_TICK	    0xF8
 #define MIDI_SPP	    0xF2
 #define MIDI_CTL_MSG	    0xB0
@@ -480,7 +481,8 @@ static int process_read_data(void) {
 	if (transport_change) {
 	    if (transport_status & TRANSPORT_RUNNING) {
 		jack_transport_start(jack_client);
-		add_rltm_event(&midi_rltm_list, MIDI_CLOCK_CONT);
+		add_rltm_event(&midi_rltm_list, midi_clock_count ? 
+				MIDI_CLOCK_CONT : MIDI_CLOCK_START);
 		midi_clock_counting = 1;
 	    } else {
 		jack_transport_stop(jack_client);

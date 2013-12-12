@@ -34,6 +34,7 @@
 #define MIDI_CONTROL_CHANNEL	0xB1
 #define MIDI_RLTM_CONT		0xFB
 #define MIDI_RLTM_STOP		0xFC
+#define MIDI_RLTM_START		0xFA
 #endif
 
 enum {

@@ -18,7 +18,9 @@
 
 #include <stdint.h>
 
+#ifndef CONTROL_NODE
 #define CONTROL_NODE
+#endif
 #include "per_node.h"
 #include "node.h"
 
