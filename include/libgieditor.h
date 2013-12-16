@@ -20,9 +20,13 @@
  * $Id: libgieditor.h,v 1.18 2012/07/18 05:42:11 kmtaylor Exp $
  */
 
-#define libgieditor_top_midi_class libgieditor_midi_class_0
-#define libgieditor_studio_class libgieditor_midi_class_3
-#define libgieditor_liveset_class libgieditor_midi_class_2
+#define libgieditor_top_midi_class	    libgieditor_midi_class_0
+#define libgieditor_studio_class	    libgieditor_midi_class_3
+#define libgieditor_liveset_class	    libgieditor_midi_class_2
+#define libgieditor_liveset_chorus_class    libgieditor_midi_class_11
+#define libgieditor_liveset_reverb_class    libgieditor_midi_class_12
+#define libgieditor_studio_chorus_class	    libgieditor_midi_class_17
+#define libgieditor_studio_reverb_class	    libgieditor_midi_class_18
 #define DEFAULT_DEVICE_ID 0x10
 #define DEFAULT_MODEL_ID 0x4C
 

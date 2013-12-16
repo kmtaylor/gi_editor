@@ -54,5 +54,9 @@ static void korg_update_leds(enum e_status cur_status) {
 	if (cur_midictl->control == 0x2B && cur_midictl->value == 0x7F)
 #define KORG_FORWARD_BUTTON_PRESSED(cur_midictl)	\
 	if (cur_midictl->control == 0x2C && cur_midictl->value == 0x7F)
+#define KORG_BACK8_BUTTON_PRESSED(cur_midictl)	\
+	if (cur_midictl->control == 0x3A && cur_midictl->value == 0x7F)
+#define KORG_FORWARD8_BUTTON_PRESSED(cur_midictl)	\
+	if (cur_midictl->control == 0x3B && cur_midictl->value == 0x7F)
 
 #endif

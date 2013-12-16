@@ -635,7 +635,18 @@ int libgieditor_paste_class(MidiClass *class, uint32_t sysex_addr,
 	class_member = &class->members[match_class_member(sysex_addr,
 								class, 0)];
 	/* Sanity check */
-	if (class_member->class != cur_class_data->class) return -2;
+	/* Live set chorus and reverb are compatible with studio set, as long
+	 * as it's GM2 */
+	if ((class_member->class != cur_class_data->class)		    &&
+	  ( (cur_class_data->class == &libgieditor_liveset_chorus_class &&
+		class_member->class != &libgieditor_studio_chorus_class)    ||
+	    (cur_class_data->class == &libgieditor_liveset_reverb_class &&
+		class_member->class != &libgieditor_studio_reverb_class)    ||
+	    (cur_class_data->class == &libgieditor_studio_chorus_class  &&
+		class_member->class != &libgieditor_liveset_chorus_class)   ||
+	    (cur_class_data->class == &libgieditor_studio_reverb_class  &&
+		class_member->class != &libgieditor_liveset_reverb_class) ) )
+		return -2;
 
 	cur_class_data->sysex_addr_base = sysex_addr;
 	cp_addresses_under_member(class_member,
