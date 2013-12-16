@@ -76,6 +76,7 @@ static inline uint8_t *rltm_to_buffer(Midi_rltm_list rltm, int *length) {
 
 static int tempo;
 static int do_sync;
+static int jitter_tolerance;
 
 /* Only access with midi_lock */
 static Midictl_list midictl_in_list;
@@ -182,8 +183,6 @@ static int process_callback(jack_nframes_t nframes, void *arg) {
 	uint8_t *buf;
 	int length;
 
-	pthread_mutex_lock(&midi_lock);
-
 	void *midi_in_buf = jack_port_get_buffer(midi_in_port, nframes);
 	void *midi_led_buf = jack_port_get_buffer(midi_led_port, nframes);
 	void *midi_rltm_buf = jack_port_get_buffer(midi_rltm_port, nframes);
@@ -192,6 +191,8 @@ static int process_callback(jack_nframes_t nframes, void *arg) {
         jack_midi_clear_buffer(midi_led_buf);
         jack_midi_clear_buffer(midi_rltm_buf);
         jack_midi_clear_buffer(midi_spp_buf);
+
+	pthread_mutex_lock(&midi_lock);
 
 	if (!midictl_led_list)
 	    pthread_cond_signal(&write_data_ready);
@@ -314,7 +315,7 @@ static void timebase_callback(jack_transport_state_t state,
 			(device_time_ms - jack_time_ms) :
 			(jack_time_ms - device_time_ms));
 
-	if (jitter > JITTER_TOLERANCE) {
+	if (jitter > jitter_tolerance) {
 	    printf("Sync required, jitter time in ms %li\n", jitter);
 	    new_frame = device_time_ms * (pos->frame_rate / 1000);
 	    jack_transport_locate(jack_client, new_frame);
@@ -519,7 +520,7 @@ static int process_read_data(void) {
 
 int main(int argc, char **argv) {
 	if (argc < 2) {
-	    printf("Usage: %s tempo\n", argv[0]);
+	    printf("Usage: %s tempo [jitter tolerance]\n", argv[0]);
 	    printf("To disable midi clock synchronisation, "
 			    "enter a negative tempo\n");
 	    exit(1);
@@ -529,11 +530,19 @@ int main(int argc, char **argv) {
 	if (tempo > 0) {
 	    do_sync = 1;
 	    printf("Midi clock tempo: %ibpm\n", tempo);
+	    printf("Jitter tolerance: ");
+	    if (argc > 2) {
+		jitter_tolerance = atoi(argv[2]);
+	    } else {
+		jitter_tolerance = JITTER_TOLERANCE;
+	    }
+	    printf("%ims\n", jitter_tolerance);
 	}
 
 	if (avr_api_init(CLIENT_CONTROLLER_NAME,
 				LIBGIEDITOR_ACK | LIBGIEDITOR_WRITE) < 0 ) {
-	    printf("Couldn't initialise avr interface.\n");
+	    printf("Couldn't initialise avr interface.\n"
+		    "Check that jackd is running.\n");
 	    exit(1);
 	}
 	/* Allow jack time to make connections before activating */
