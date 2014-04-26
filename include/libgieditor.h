@@ -22,6 +22,7 @@
 
 #define libgieditor_top_midi_class	    libgieditor_midi_class_0
 #define libgieditor_studio_class	    libgieditor_midi_class_3
+#define libgieditor_studio_address	    0x18000000
 #define libgieditor_liveset_class	    libgieditor_midi_class_2
 #define libgieditor_liveset_chorus_class    libgieditor_midi_class_11
 #define libgieditor_liveset_reverb_class    libgieditor_midi_class_12
@@ -137,6 +138,7 @@ extern int libgieditor_get_sysex(uint32_t sysex_addr,
 		                uint32_t sysex_size, uint8_t **data);
 
 extern char *libgieditor_get_patch_name(uint32_t sysex_addr);
+extern char *libgieditor_get_copy_patch_name(void);
 extern int libgieditor_refresh_patch_names(void);
 
 /* Class refers to the parent class */

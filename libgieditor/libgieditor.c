@@ -460,6 +460,22 @@ char *libgieditor_get_patch_name(uint32_t sysex_addr) {
         return NULL;
 }
 
+char *libgieditor_get_copy_patch_name(void) {
+	int i;
+	char patch_name[MAX_SET_NAME_SIZE + 1];
+
+	if ((copy_paste_data->class != &libgieditor_studio_class) &&
+	    (copy_paste_data->class != &libgieditor_liveset_class))
+	    return NULL;
+
+	for (i = 0; i < MAX_SET_NAME_SIZE; i++) {
+	    patch_name[i] = copy_paste_data->m_addresses[i].value;
+	}
+	patch_name[i] = '\0';
+
+	return strdup(patch_name);
+}
+
 int libgieditor_refresh_patch_names(void) {
 	int i;
 	char *data;
@@ -637,15 +653,15 @@ int libgieditor_paste_class(MidiClass *class, uint32_t sysex_addr,
 	/* Sanity check */
 	/* Live set chorus and reverb are compatible with studio set, as long
 	 * as it's GM2 */
-	if ((class_member->class != cur_class_data->class)		    &&
-	  ( (cur_class_data->class == &libgieditor_liveset_chorus_class &&
+	if ((cur_class_data->class == &libgieditor_liveset_chorus_class &&
 		class_member->class != &libgieditor_studio_chorus_class)    ||
 	    (cur_class_data->class == &libgieditor_liveset_reverb_class &&
 		class_member->class != &libgieditor_studio_reverb_class)    ||
 	    (cur_class_data->class == &libgieditor_studio_chorus_class  &&
 		class_member->class != &libgieditor_liveset_chorus_class)   ||
 	    (cur_class_data->class == &libgieditor_studio_reverb_class  &&
-		class_member->class != &libgieditor_liveset_reverb_class) ) )
+		class_member->class != &libgieditor_liveset_reverb_class)   ||
+	    (class_member->class != cur_class_data->class))
 		return -2;
 
 	cur_class_data->sysex_addr_base = sysex_addr;
@@ -865,7 +881,8 @@ void libgieditor_flush_copy_data(int *depth) {
 	*depth = 0;
 }
 
-#define CHECK_ERROR \
+#define CHECK_ERROR(val) \
+	if (!val) goto parse_error;					    \
 	p_error = 0;							    \
 	retval = g_error_matches(error, G_KEY_FILE_ERROR,		    \
 				G_KEY_FILE_ERROR_KEY_NOT_FOUND);	    \
@@ -898,15 +915,15 @@ int libgieditor_read_copy_data_from_file(char *filename, int *depth) {
 
 	num_addresses = g_key_file_get_uint64(key_file, GENERAL_GROUP,
 			SIZE_KEY, &error);
-	CHECK_ERROR;
+	CHECK_ERROR(num_addresses);
 
 	addr_base = g_key_file_get_uint64(key_file, GENERAL_GROUP,
 			ADDRESS_BASE_KEY, &error);
-	CHECK_ERROR;
+	CHECK_ERROR(addr_base);
 
 	class_name = g_key_file_get_string(key_file, GENERAL_GROUP,
 			CLASS_KEY, &error);
-	CHECK_ERROR;
+	CHECK_ERROR(class_name);
 
 	class = libgieditor_match_class_name(class_name);
 	free(class_name);

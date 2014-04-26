@@ -36,6 +36,8 @@
 #include "midi_addresses.h"
 #include "sysex_explorer.h"
 
+#define CLIENT_NAME "sysex_explorer"
+
 #define allocate(type, num, func_name) \
 	__interface_allocate(((num) * sizeof(type)), func_name)
 
@@ -650,11 +652,11 @@ static void do_paste(MidiClassMember *tmp_member, MidiClass *cur_class,
 	int tried_layer_to_part = 0;
 
 	if (layer_to_part) {
+	    layer_to_part = 0;
 	    if (get_layer_and_part(&layer, &part) < 0) return;
 	    retval = libgieditor_paste_layer_to_part(cur_class,
 		sysex_base_addr + tmp_member->sysex_addr_base,
 		copy_depth, layer, part);
-	    layer_to_part = 0;
 	    tried_layer_to_part = 1;
 	} else {
 	    retval = libgieditor_paste_class(cur_class,
