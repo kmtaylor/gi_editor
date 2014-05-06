@@ -43,7 +43,15 @@
 #define allocate(type, num, func_name) \
 	__interface_allocate(((num) * sizeof(type)), func_name)
 
+typedef struct s_name_list name_list_t;
+struct s_name_list {
+	struct dirent *file_dirent;
+	char *name;
+	name_list_t *next;
+};
+
 static int global_want_quit;
+static name_list_t *patch_names;
 
 void report_error(char *msg) {
 	char *message[2];
@@ -317,15 +325,52 @@ static int read_studio_set(int *copy_depth) {
 static void print_rhc(struct dirent *cur_file, int *copy_depth,
 		WINDOW *menu_sub_win, int skip, int i) {
 	char *print_string = NULL;
+	char *func_name = "print_rhc()";
+	name_list_t *cur_patch;
 
+	/* First check if we've cached this patch */
+	cur_patch = patch_names;
+	while (cur_patch) {
+	    if (cur_patch->file_dirent == cur_file) {
+		print_string = cur_patch->name;
+		goto found;
+	    }
+	    cur_patch = cur_patch->next;
+	}
+
+	/* Not found, so add it to the cache */
 	if (!parse_file(cur_file, copy_depth))
 	    print_string = libgieditor_get_copy_patch_name();
 
+	if (!patch_names) {
+	    cur_patch = allocate(name_list_t, 1, func_name);
+	    patch_names = cur_patch;
+	} else {
+	    cur_patch = patch_names;
+	    while (cur_patch->next) cur_patch = cur_patch->next;
+	    cur_patch->next = allocate(name_list_t, 1, func_name);
+	    cur_patch = cur_patch->next;
+	}
+
+	cur_patch->next = NULL;
+	cur_patch->name = print_string;
+	cur_patch->file_dirent = cur_file;
+
+found:
 	if (print_string) PRINT_STRING(print_string, i - skip)
 	else PRINT_STRING("Invalid file", i - skip);
 
 	libgieditor_flush_copy_data(copy_depth);
-	free(print_string);
+}
+
+static void flush_patches(void) {
+	name_list_t *cur_patch;
+	while (patch_names) {
+	    cur_patch = patch_names;
+	    patch_names = patch_names->next;
+	    if (cur_patch->name) free(cur_patch->name);
+	    free(cur_patch);
+	}
 }
 
 static void do_paste(int *copy_depth) {
@@ -387,7 +432,7 @@ static int file_filter(const struct dirent *entry) {
 	return 1;
 }
 
-static int studio_explorer(char **headers, char *footer) {
+static char *studio_explorer(char **headers, char *footer) {
 	PANEL *explorer_panel;
 	MENU *explorer_menu;
 	WINDOW *explorer_win, *menu_sub_win;
@@ -404,6 +449,7 @@ static int studio_explorer(char **headers, char *footer) {
 	char *filename;
 	char *file_path;
 	char **long_names;
+	char *loaded_patch_name = NULL;
 	struct dirent **dir_contents;
 	struct dirent *cur_file;
 
@@ -423,25 +469,26 @@ static int studio_explorer(char **headers, char *footer) {
 	}
 	member_items[n_members] = NULL;
 
-	explorer_win = newwin(LINES - 1, COLS, 0, 0);
+	explorer_win = newwin(LINES, COLS, 0, 0);
 	explorer_panel = new_panel(explorer_win);
 	explorer_menu = new_menu(member_items);
 	box(explorer_win, 0, 0);
 	set_menu_mark(explorer_menu, " * ");
-	menu_sub_win = derwin(explorer_win, LINES - 5 - (2 * n_parents),
-			COLS - 2, 3 + (2 * n_parents), 1);
+	menu_sub_win = derwin(explorer_win, LINES - 2 - (2 * n_parents),
+			COLS - 2, 1 + (2 * n_parents), 1);
 	set_menu_win(explorer_menu, explorer_win);
 	set_menu_sub(explorer_menu, menu_sub_win);
-	set_menu_format(explorer_menu, LINES - 5 - (2 * n_parents), 1);
+	set_menu_format(explorer_menu, LINES - 2 - (2 * n_parents), 1);
 
 	for (i = 0; i < n_parents + 1; i++) {
-	    print_in_middle(explorer_win, 1 + (2 * i), 0, COLS, headers[i]); 
-	    mvwaddch(explorer_win, 2 + (2 * i), 0, ACS_LTEE);
-	    mvwhline(explorer_win, 2 + (2 * i), 1, ACS_HLINE, COLS-2);
-	    mvwaddch(explorer_win, 2 + (2 * i), COLS-1, ACS_RTEE);
+	    print_in_middle(explorer_win, 0 + (2 * i), 0, COLS, headers[i]); 
+//	    mvwaddch(explorer_win, 1 + (2 * i), 0, ACS_LTEE);
+//	    mvwhline(explorer_win, 1 + (2 * i), 1, ACS_HLINE, COLS-2);
+//	    mvwaddch(explorer_win, 1 + (2 * i), COLS-1, ACS_RTEE);
 	}
 
-        mvprintw(LINES - 1, 0, footer);
+	print_in_middle(explorer_win, LINES - 1, 0, COLS, footer);
+        //mvprintw(LINES - 1, 0, footer);
 	post_menu(explorer_menu);
 
 	do {
@@ -458,9 +505,9 @@ static int studio_explorer(char **headers, char *footer) {
 		c = getch();
 		switch(c) {
 		    case KEY_DOWN:
-			if ( position == LINES - 6 - (2 * n_parents) ) { 
+			if ( position == LINES - 3 - (2 * n_parents) ) { 
 			    if (skip <
-				    (n_members - LINES + 5 + (2 * n_parents))) {
+				    (n_members - LINES + 2 + (2 * n_parents))) {
 				skip++;
 				damaged = 1;
 			    }
@@ -497,6 +544,8 @@ static int studio_explorer(char **headers, char *footer) {
 			update_panels();
 			doupdate();
 			parse_file(cur_file, &copy_depth);
+			if (loaded_patch_name) free(loaded_patch_name);
+			loaded_patch_name = libgieditor_get_copy_patch_name(); 
 			do_paste(&copy_depth);
 			mvprintw(LINES - 1, COLS - 11, "Done      ");
 			break;
@@ -510,6 +559,13 @@ static int studio_explorer(char **headers, char *footer) {
 			    write_file(filename, &copy_depth);
 			free(filename);
 		    case 'r':
+			if (!loaded_patch_name) {
+			    if (!read_studio_set(&copy_depth)) {
+				loaded_patch_name = 
+					libgieditor_get_copy_patch_name();
+				libgieditor_flush_copy_data(&copy_depth);
+			    }
+			}
 			want_break = 1;
 			want_restart = 1;
 			break;
@@ -519,6 +575,7 @@ static int studio_explorer(char **headers, char *footer) {
 		}
 	} while( !want_break );
 	
+	flush_patches();
 	for (i = 0; i < n_members; i++)
 	    free(dir_contents[i]);
 	free(dir_contents);
@@ -534,15 +591,28 @@ static int studio_explorer(char **headers, char *footer) {
 	delwin(menu_sub_win);
 	delwin(explorer_win);
 	clear(); halfdelay(10);
-	if (want_restart) return 1;
-	return 0;
+	if (want_restart) return loaded_patch_name;
+	return NULL;
 }
 
 static void studio_explorer_menu_wrapper(void) {
-        char *headers[] = { "Studio Explorer" };
+        char *headers[1];
+	char *init_header = " Studio Explorer ";
 	char *footer =  
-	"(R)efresh, (L)oad, (N)ew, (S)ave, (Q)uit.";
-	while(studio_explorer(headers, footer));	
+	" (R)efresh, (L)oad, (N)ew, (S)ave, (Q)uit. ";
+	int init = 1;
+	char *patch_name = "";
+	while(patch_name) {
+	    if (init) {
+		headers[0] = init_header;
+		init = 0;
+	    } else {
+		asprintf(&headers[0], " Studio Explorer (%s) ", patch_name);
+		free(patch_name);
+	    }
+	    patch_name = studio_explorer(headers, footer);
+	    if (headers[0] != init_header) free(headers[0]);
+	}
 }
 
 static void view_log(void) {
@@ -648,7 +718,9 @@ int main(void) {
 			case 10:
 				cur = current_item(main_menu);
 				p = item_userptr(cur);
+				unpost_menu(main_menu);
 				if (p) p();
+				post_menu(main_menu);
 				break;
                 }
         } while ( !global_want_quit );
