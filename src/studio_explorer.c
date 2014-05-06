@@ -487,8 +487,7 @@ static char *studio_explorer(char **headers, char *footer) {
 //	    mvwaddch(explorer_win, 1 + (2 * i), COLS-1, ACS_RTEE);
 	}
 
-	print_in_middle(explorer_win, LINES - 1, 0, COLS, footer);
-        //mvprintw(LINES - 1, 0, footer);
+        mvwprintw(explorer_win, LINES - 1, 1, footer);
 	post_menu(explorer_menu);
 
 	do {
@@ -530,29 +529,34 @@ static char *studio_explorer(char **headers, char *footer) {
 			}
 			cur = current_item(explorer_menu);
 			cur_file = item_userptr(cur);
-			mvprintw(LINES - 1, COLS - 11, "Reading...");
+			mvwprintw(explorer_win, LINES - 1, COLS - 12,
+					" Reading...");
 			update_panels();
 			doupdate();
 			if (!read_studio_set(&copy_depth))
 			    write_file(cur_file->d_name, &copy_depth);
-			mvprintw(LINES - 1, COLS - 11, "Done      ");
+			mvwprintw(explorer_win, LINES - 1, COLS - 12,
+					" Done      ");
 			break;
 		    case 'l':
 			cur = current_item(explorer_menu);
 			cur_file = item_userptr(cur);
-			mvprintw(LINES - 1, COLS - 11, "Writing...");
+			mvwprintw(explorer_win, LINES - 1, COLS - 12,
+					" Writing...");
 			update_panels();
 			doupdate();
 			parse_file(cur_file, &copy_depth);
 			if (loaded_patch_name) free(loaded_patch_name);
 			loaded_patch_name = libgieditor_get_copy_patch_name(); 
 			do_paste(&copy_depth);
-			mvprintw(LINES - 1, COLS - 11, "Done      ");
+			mvwprintw(explorer_win, LINES - 1, COLS - 12,
+					" Done      ");
 			break;
 		    case 'n':
 			retval = get_string("Filename:", &filename);
 			if (retval < 0) break;
-			mvprintw(LINES - 1, COLS - 11, "Reading...");
+			mvwprintw(explorer_win, LINES - 1, COLS - 12,
+					" Reading...");
 			update_panels();
 			doupdate();
 			if (!read_studio_set(&copy_depth))
