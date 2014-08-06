@@ -170,8 +170,13 @@ static long midiclk_measures(void) {
 	return 1 + lround(midi_clock_count / (float) TICKS_PER_BAR);
 }
 
+static long midiclk_bars(void) {
+	return 1 + floor(midi_clock_count / (float) TICKS_PER_BAR);
+}
+
 static long midiclk_beats(void) {
-	return 1 + lround(midi_clock_count / (float) TICKS_PER_BEAT);
+	long beat_no = floor(midi_clock_count / (float) TICKS_PER_BEAT);
+	return 1 + (beat_no % BEATS_PER_BAR);
 }
 
 static void set_midiclk_measures(long measures) {
@@ -353,8 +358,8 @@ static void timebase_callback(jack_transport_state_t state,
 	// FIXME: Check locking
 	pos->valid = JackPositionBBT;
 	pos->beats_per_minute = tempo;
-	pos->bar = midiclk_measures();
-	pos->beat = midiclk_beats() % BEATS_PER_BAR;
+	pos->bar = midiclk_bars();
+	pos->beat = midiclk_beats();
 	pos->tick = midi_clock_count % TICKS_PER_BEAT;
 	pos->bar_start_tick =	BEATS_PER_BAR * TICKS_PER_BEAT * 
 				midiclk_measures();
