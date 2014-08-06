@@ -444,7 +444,7 @@ static char *studio_explorer(char **headers, char *footer) {
 	int n_parents = 0;
 	int menu_width = COLS - 23;
 	int c, i, want_break = 0, want_restart = 0;
-	int position = 0, skip = 0, damaged = 1;
+	int position = 0, skip = 0, damaged = 1, first_draw = 1;
 	char *func_name = "studio_explorer()";
 	char *filename;
 	char *file_path;
@@ -469,25 +469,25 @@ static char *studio_explorer(char **headers, char *footer) {
 	}
 	member_items[n_members] = NULL;
 
-	explorer_win = newwin(LINES, COLS, 0, 0);
+	explorer_win = newwin(LINES - 1, COLS, 0, 0);
 	explorer_panel = new_panel(explorer_win);
 	explorer_menu = new_menu(member_items);
 	box(explorer_win, 0, 0);
 	set_menu_mark(explorer_menu, " * ");
-	menu_sub_win = derwin(explorer_win, LINES - 2 - (2 * n_parents),
-			COLS - 2, 1 + (2 * n_parents), 1);
+	menu_sub_win = derwin(explorer_win, LINES - 5 - (2 * n_parents),
+			COLS - 2, 3 + (2 * n_parents), 1);
 	set_menu_win(explorer_menu, explorer_win);
 	set_menu_sub(explorer_menu, menu_sub_win);
-	set_menu_format(explorer_menu, LINES - 2 - (2 * n_parents), 1);
+	set_menu_format(explorer_menu, LINES - 5 - (2 * n_parents), 1);
 
 	for (i = 0; i < n_parents + 1; i++) {
-	    print_in_middle(explorer_win, 0 + (2 * i), 0, COLS, headers[i]); 
-//	    mvwaddch(explorer_win, 1 + (2 * i), 0, ACS_LTEE);
-//	    mvwhline(explorer_win, 1 + (2 * i), 1, ACS_HLINE, COLS-2);
-//	    mvwaddch(explorer_win, 1 + (2 * i), COLS-1, ACS_RTEE);
+	    print_in_middle(explorer_win, 1 + (2 * i), 0, COLS, headers[i]); 
+	    mvwaddch(explorer_win, 2 + (2 * i), 0, ACS_LTEE);
+	    mvwhline(explorer_win, 2 + (2 * i), 1, ACS_HLINE, COLS-2);
+	    mvwaddch(explorer_win, 2 + (2 * i), COLS-1, ACS_RTEE);
 	}
 
-        mvwprintw(explorer_win, LINES - 1, 1, footer);
+        mvprintw(LINES - 1, 0, footer);
 	post_menu(explorer_menu);
 
 	do {
@@ -497,13 +497,15 @@ static char *studio_explorer(char **headers, char *footer) {
 			print_rhc(cur_file, &copy_depth, menu_sub_win, skip, i);
 		    }
 		    damaged = 0;
-		    wrefresh(menu_sub_win);
+		    if (!first_draw) wrefresh(menu_sub_win);
+		    first_draw = 0;
 		}
 		update_panels();
 		doupdate();
 		c = getch();
 		switch(c) {
 		    case KEY_DOWN:
+		    case '/':
 			if ( position == LINES - 3 - (2 * n_parents) ) { 
 			    if (skip <
 				    (n_members - LINES + 2 + (2 * n_parents))) {
@@ -514,6 +516,7 @@ static char *studio_explorer(char **headers, char *footer) {
 			menu_driver(explorer_menu, REQ_DOWN_ITEM);
 			break;
 		    case KEY_UP:
+		    case '.':
 			if (position == 0) {
 			    if (skip > 0) {
 				skip--;
@@ -529,34 +532,29 @@ static char *studio_explorer(char **headers, char *footer) {
 			}
 			cur = current_item(explorer_menu);
 			cur_file = item_userptr(cur);
-			mvwprintw(explorer_win, LINES - 1, COLS - 12,
-					" Reading...");
+			mvprintw(LINES - 1, COLS - 12, " Reading...");
 			update_panels();
 			doupdate();
 			if (!read_studio_set(&copy_depth))
 			    write_file(cur_file->d_name, &copy_depth);
-			mvwprintw(explorer_win, LINES - 1, COLS - 12,
-					" Done      ");
+			mvprintw(LINES - 1, COLS - 12, " Done      ");
 			break;
 		    case 'l':
 			cur = current_item(explorer_menu);
 			cur_file = item_userptr(cur);
-			mvwprintw(explorer_win, LINES - 1, COLS - 12,
-					" Writing...");
+			mvprintw(LINES - 1, COLS - 12, " Writing...");
 			update_panels();
 			doupdate();
 			parse_file(cur_file, &copy_depth);
 			if (loaded_patch_name) free(loaded_patch_name);
 			loaded_patch_name = libgieditor_get_copy_patch_name(); 
 			do_paste(&copy_depth);
-			mvwprintw(explorer_win, LINES - 1, COLS - 12,
-					" Done      ");
+			mvprintw(LINES - 1, COLS - 12, " Done      ");
 			break;
 		    case 'n':
 			retval = get_string("Filename:", &filename);
 			if (retval < 0) break;
-			mvwprintw(explorer_win, LINES - 1, COLS - 12,
-					" Reading...");
+			mvprintw(LINES - 1, COLS - 12, " Reading...");
 			update_panels();
 			doupdate();
 			if (!read_studio_set(&copy_depth))

@@ -64,7 +64,8 @@ static Midictl_list midictl_led_list;
 static Midictl_list midictl_ctl_list;
 
 static jack_client_t *jack_client;
-static jack_port_t *midi_in_port;
+static jack_port_t *midi_ctl_in_port;
+static jack_port_t *midi_note_in_port;
 static jack_port_t *midi_led_port;
 static jack_port_t *midi_ctl_port;
 
@@ -98,7 +99,9 @@ static int jack_callback(jack_nframes_t nframes, void *arg) {
 
 	pthread_mutex_lock(&midi_lock);
 
-	void *midi_in_buf = jack_port_get_buffer(midi_in_port, nframes);
+	void *midi_ctl_in_buf = jack_port_get_buffer(midi_ctl_in_port, nframes);
+	void *midi_note_in_buf =
+			jack_port_get_buffer(midi_note_in_port, nframes);
 	void *midi_led_buf = jack_port_get_buffer(midi_led_port, nframes);
 	void *midi_ctl_buf = jack_port_get_buffer(midi_ctl_port, nframes);
 
@@ -130,13 +133,19 @@ static int jack_callback(jack_nframes_t nframes, void *arg) {
 
         event_index = 0;
 
-	while (jack_midi_event_get(&jack_midi_event, midi_in_buf, 
+	while (jack_midi_event_get(&jack_midi_event, midi_ctl_in_buf, 
 					event_index++) == 0) {
 	    if ((jack_midi_event.buffer[0] & 0xF0) == MIDI_CTL_MSG) {
 		add_midictl_event(&midictl_in_list, jack_midi_event.buffer,
 				    jack_midi_event.size);
 		pthread_cond_signal(&read_data_ready);
 	    }
+	}
+
+	event_index = 0;
+
+	while (jack_midi_event_get(&jack_midi_event, midi_note_in_buf,
+					event_index++) == 0) {
 	    if ((jack_midi_event.buffer[0] & 0xF0) == MIDI_NOTE_MSG) {
 		add_midictl_event(&midictl_note_list, jack_midi_event.buffer,
 				    jack_midi_event.size);
@@ -155,7 +164,11 @@ static int jack_init(const char *client_name) {
 		jack_client_open(client_name, JackNoStartServer, &jack_status);
 	if (!jack_client) return -1;
 
-	midi_in_port = jack_port_register(jack_client, "midi_in",
+	midi_ctl_in_port = jack_port_register(jack_client, "midi_ctl_in",
+			JACK_DEFAULT_MIDI_TYPE,
+			JackPortIsInput | JackPortIsTerminal, 0);
+	
+	midi_note_in_port = jack_port_register(jack_client, "midi_note_in",
 			JACK_DEFAULT_MIDI_TYPE,
 			JackPortIsInput | JackPortIsTerminal, 0);
 	
@@ -167,7 +180,8 @@ static int jack_init(const char *client_name) {
 			JACK_DEFAULT_MIDI_TYPE,
 			JackPortIsOutput | JackPortIsTerminal, 0);
 	
-	if (!(midi_in_port && midi_led_port && midi_ctl_port)) return -1;
+	if (!(midi_ctl_in_port && midi_led_port && midi_ctl_port && 
+				midi_note_in_port)) return -1;
 	
 	jack_set_process_callback(jack_client, jack_callback, 0);
 
@@ -211,8 +225,10 @@ static int jack_close(void) {
 	}
 	pthread_mutex_unlock(&midi_lock);
 	jack_deactivate(jack_client);
-	if (midi_in_port)
-	    jack_port_unregister(jack_client, midi_in_port);
+	if (midi_ctl_in_port)
+	    jack_port_unregister(jack_client, midi_ctl_in_port);
+	if (midi_note_in_port)
+	    jack_port_unregister(jack_client, midi_note_in_port);
 	if (midi_led_port)
 	    jack_port_unregister(jack_client, midi_led_port);
 	if (midi_ctl_port)
@@ -255,14 +271,15 @@ static void update_states_cb(struct controller *dummy) {
 static void copy_paste(struct controller *cur_controller, int reset) {
 	static enum {INIT_LAYER, LAYER, INIT_PART, PART} state;
 	static int layer, part;
-	int val = button_value(cur_controller->respond_to) + 1;
-	int failed, dummy;
+	int val, failed, dummy;
 
 	if (reset) {
 	    state = INIT_LAYER;
 	    libgieditor_flush_copy_data(&dummy);
 	    return;
 	}
+
+	val = button_value(cur_controller->respond_to) + 1;
 	    
 	switch (state) {
 	    case INIT_LAYER:
@@ -385,6 +402,8 @@ static struct controller juno_106_0[] = {
 	{ 0x03,	1,  0, 0x1000301a,	    0,		1,	    127	},
 	// TVF Cutoff Keyfolow Offset
 	{ 0x12,	1,  0, 0x10003015,	    0,	       44,	     84	},
+	// Keyboard velocity
+	{ 0x13, 1,  0, 0x02004002,	    0,		0,	    127 },
 	// Filter Type
 	{ 0x44,	1,  1, 0x10003013,	    0,	        0,	      1,
 							    update_states_cb },
@@ -446,6 +465,8 @@ static struct controller juno_106_1[] = {
 	{ 0x03,	1,  0, 0x1000311a,	    0,		1,	    127	},
 	// TVF Cutoff Keyfolow Offset
 	{ 0x12,	1,  0, 0x10003115,	    0,	       44,	     84	},
+	// Keyboard velocity
+	{ 0x13, 1,  0, 0x02004002,	    0,		0,	    127 },
 	// Filter Type
 	{ 0x44,	1,  1, 0x10003113,	    0,	        0,	      1,
 							    update_states_cb },
@@ -507,6 +528,8 @@ static struct controller juno_106_2[] = {
 	{ 0x03,	1,  0, 0x1000321a,	    0,		1,	    127	},
 	// TVF Cutoff Keyfolow Offset
 	{ 0x12,	1,  0, 0x10003215,	    0,	       44,	     84	},
+	// Keyboard velocity
+	{ 0x13, 1,  0, 0x02004002,	    0,		0,	    127 },
 	// Filter Type
 	{ 0x44,	1,  1, 0x10003213,	    0,	        0,	      1,
 							    update_states_cb },
@@ -568,6 +591,8 @@ static struct controller juno_106_3[] = {
 	{ 0x03,	1,  0, 0x1000331a,	    0,		1,	    127	},
 	// TVF Cutoff Keyfolow Offset
 	{ 0x12,	1,  0, 0x10003315,	    0,	       44,	     84	},
+	// Keyboard velocity
+	{ 0x13, 1,  0, 0x02004002,	    0,		0,	    127 },
 	// Filter Type
 	{ 0x44,	1,  1, 0x10003313,	    0,	        0,	      1,
 							    update_states_cb },

@@ -35,7 +35,7 @@
 #define LIBGIEDITOR_DEBUG 1
 #endif
 
-#define TIMEOUT_TIME 200
+#define TIMEOUT_TIME 3000
 #define MAX_SET_NAME_SIZE 16
 #define NUM_USER_PATCHES 256
 

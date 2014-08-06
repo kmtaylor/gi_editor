@@ -55,6 +55,15 @@
     buf[VALUE_OFFSET] = value
 #define allocate(t, num) __common_allocate(sizeof(t) * num, "midi2jacksync")
 
+#define BEATS_PER_BAR	4
+#define BEAT_TYPE	4
+#define TICKS_PER_BEAT	24
+#define TICKS_PER_BAR	(BEATS_PER_BAR * TICKS_PER_BEAT)
+#define TICKS_PER_SPP	6
+#define SECONDS_PER_MIN	60
+#define MS_PER_TICK	(1000 * SECONDS_PER_MIN / TICKS_PER_BEAT)
+#define SECS_PER_BAR	(SECONDS_PER_MIN * BEATS_PER_BAR)
+
 typedef struct s_midictl_list *Midictl_list;
 struct s_midictl_list {
 	uint8_t		control;
@@ -77,6 +86,7 @@ static inline uint8_t *rltm_to_buffer(Midi_rltm_list rltm, int *length) {
 static int tempo;
 static int do_sync;
 static int jitter_tolerance;
+static int ignore_sync;
 
 /* Only access with midi_lock */
 static Midictl_list midictl_in_list;
@@ -144,33 +154,37 @@ static void add_rltm_event(Midi_rltm_list *global_rltm_list, uint8_t byte) {
 
 static void add_spp_event(Midi_rltm_list *global_rltm_list) {
 	__add_rltm_event(global_rltm_list, MIDI_SPP,
-			(midi_clock_count / 6) & 0x7f,
-			((midi_clock_count / 6) >> 7) & 0x7f, 1);
+			(midi_clock_count / TICKS_PER_SPP) & 0x7f,
+			((midi_clock_count / TICKS_PER_SPP) >> 7) & 0x7f, 1);
 }
 
 static unsigned long midiclk_from_ms(unsigned long ms) {
-	return ms * (tempo / (float) 2500);
+	return ms * (tempo / (float) MS_PER_TICK);
 }
 
 static unsigned long ms_from_midiclk(void) {
-	return midi_clock_count * (2500 / (float) tempo);
+	return midi_clock_count * (MS_PER_TICK / (float) tempo);
 }
 
 static long midiclk_measures(void) {
-	return 1 + lround(midi_clock_count * 25 / (float) 2400);
+	return 1 + lround(midi_clock_count / (float) TICKS_PER_BAR);
+}
+
+static long midiclk_beats(void) {
+	return 1 + lround(midi_clock_count / (float) TICKS_PER_BEAT);
 }
 
 static void set_midiclk_measures(long measures) {
-	midi_clock_count = 96 * (measures - 1);	
+	midi_clock_count = TICKS_PER_BAR * (measures - 1);
 }
 
 static long measure_from_frame(jack_position_t *pos) {
 	return 1 + lround((tempo * pos->frame) /
-			(double) (240 * pos->frame_rate));
+			(double) (SECS_PER_BAR * pos->frame_rate));
 }
 
 static long frame_from_measure(jack_position_t *pos, int measure) {
-	return lround(240 * (measure - 1) * (pos->frame_rate-1) /
+	return lround(SECS_PER_BAR * (measure - 1) * (pos->frame_rate-1) /
 			(double) tempo);
 }
 
@@ -260,6 +274,11 @@ static int sync_callback(jack_transport_state_t state, jack_position_t *pos,
 	unsigned long jack_time_ms;
 	double intpart;
 
+	if (ignore_sync) {
+	    ignore_sync = 0;
+	    return 1;
+	}
+
 	long jack_measure = measure_from_frame(pos);
 	long measure_frame = frame_from_measure(pos, jack_measure);
 	long delta = (pos->frame > measure_frame ?
@@ -271,7 +290,7 @@ static int sync_callback(jack_transport_state_t state, jack_position_t *pos,
 	if (delta > 300) return 1;
 
 	pthread_mutex_lock(&midi_lock);
-	if (modf((midi_clock_count * 25 / (float) 2400), &intpart) > 0.5) {
+	if (modf((midi_clock_count / (float) TICKS_PER_BAR), &intpart) > 0.5) {
 	    avr_delta_measure(1);
 	}
 	avr_delta_measure(jack_measure - midiclk_measures());
@@ -290,6 +309,12 @@ static void timebase_callback(jack_transport_state_t state,
 	unsigned long jitter;
 	jack_nframes_t new_frame;
 	static int begin_counting;
+	static int skip_next_callback;
+
+	if (skip_next_callback) {
+		skip_next_callback = 0;
+		return;
+	}
 
 	if (state != JackTransportRolling) {
 	    pthread_mutex_lock(&midi_lock);
@@ -318,11 +343,25 @@ static void timebase_callback(jack_transport_state_t state,
 	if (jitter > jitter_tolerance) {
 	    printf("Sync required, jitter time in ms %li\n", jitter);
 	    new_frame = device_time_ms * (pos->frame_rate / 1000);
+	    skip_next_callback = 1;
+	    ignore_sync = 1;
 	    jack_transport_locate(jack_client, new_frame);
 	}
 
-	if (do_sync)
-	    pos->beats_per_minute = tempo;
+#define SET_BBT 1
+#if SET_BBT
+	// FIXME: Check locking
+	pos->valid = JackPositionBBT;
+	pos->beats_per_minute = tempo;
+	pos->bar = midiclk_measures();
+	pos->beat = midiclk_beats() % BEATS_PER_BAR;
+	pos->tick = midi_clock_count % TICKS_PER_BEAT;
+	pos->bar_start_tick =	BEATS_PER_BAR * TICKS_PER_BEAT * 
+				midiclk_measures();
+	pos->beats_per_bar = BEATS_PER_BAR;	/* Time signature numerator */
+	pos->beat_type = BEAT_TYPE;		/* Time signature denominator */
+	pos->ticks_per_beat = TICKS_PER_BEAT;
+#endif
 }
 
 static int jack_init(const char *client_name) {
