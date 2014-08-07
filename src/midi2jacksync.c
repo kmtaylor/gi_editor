@@ -362,7 +362,7 @@ static void timebase_callback(jack_transport_state_t state,
 	pos->beat = midiclk_beats();
 	pos->tick = midi_clock_count % TICKS_PER_BEAT;
 	pos->bar_start_tick =	BEATS_PER_BAR * TICKS_PER_BEAT * 
-				midiclk_measures();
+				(midiclk_bars() - 1);
 	pos->beats_per_bar = BEATS_PER_BAR;	/* Time signature numerator */
 	pos->beat_type = BEAT_TYPE;		/* Time signature denominator */
 	pos->ticks_per_beat = TICKS_PER_BEAT;
