@@ -37,6 +37,7 @@
 #define CLIENT_CONTROLLER_NAME "JackSyncerAVR"
 
 #define JITTER_TOLERANCE 40
+#define SET_BBT 1
 
 #define MIDI_CLOCK_CONT	    0xFB
 #define MIDI_CLOCK_STOP	    0xFC
@@ -87,6 +88,7 @@ static int tempo;
 static int do_sync;
 static int jitter_tolerance;
 static int ignore_sync;
+static int looping = -1;
 
 /* Only access with midi_lock */
 static Midictl_list midictl_in_list;
@@ -99,6 +101,7 @@ enum e_status {
 	TRANSPORT_STOPPED = 0,
 	TRANSPORT_RUNNING = 1,
 	TRANSPORT_RECORDING = 2,
+	TRANSPORT_LOOP = 4,
 };
 static enum e_status transport_status;
 
@@ -171,11 +174,11 @@ static long midiclk_measures(void) {
 }
 
 static long midiclk_bars(void) {
-	return 1 + floor(midi_clock_count / (float) TICKS_PER_BAR);
+	return 1 + midi_clock_count / TICKS_PER_BAR;
 }
 
 static long midiclk_beats(void) {
-	long beat_no = floor(midi_clock_count / (float) TICKS_PER_BEAT);
+	long beat_no = midi_clock_count / TICKS_PER_BEAT;
 	return 1 + (beat_no % BEATS_PER_BAR);
 }
 
@@ -207,9 +210,9 @@ static int process_callback(jack_nframes_t nframes, void *arg) {
 	void *midi_rltm_buf = jack_port_get_buffer(midi_rltm_port, nframes);
 	void *midi_spp_buf = jack_port_get_buffer(midi_spp_port, nframes);
 
-        jack_midi_clear_buffer(midi_led_buf);
-        jack_midi_clear_buffer(midi_rltm_buf);
-        jack_midi_clear_buffer(midi_spp_buf);
+	jack_midi_clear_buffer(midi_led_buf);
+	jack_midi_clear_buffer(midi_rltm_buf);
+	jack_midi_clear_buffer(midi_spp_buf);
 
 	pthread_mutex_lock(&midi_lock);
 
@@ -224,7 +227,7 @@ static int process_callback(jack_nframes_t nframes, void *arg) {
 	    free(cur_rltm);
 	}
 	
-        event_index = 0;
+	event_index = 0;
 
 	while (midi_spp_list) {
 	    cur_rltm = midi_spp_list;
@@ -234,18 +237,18 @@ static int process_callback(jack_nframes_t nframes, void *arg) {
 	    free(cur_rltm);
 	}
 	
-        event_index = 0;
+	event_index = 0;
 
-        while (midictl_led_list) {
-            cur_midictl = midictl_led_list;
-            midictl_led_list = midictl_led_list->next;
+	while (midictl_led_list) {
+	    cur_midictl = midictl_led_list;
+	    midictl_led_list = midictl_led_list->next;
 	    CONTROL_TO_BUFFER(data, cur_midictl->control, cur_midictl->value);
-            jack_midi_event_write(midi_led_buf, event_index++, data,
-                                MIDI_CTL_SIZE);
-            free(cur_midictl);
-        }
+	    jack_midi_event_write(midi_led_buf, event_index++, data,
+				MIDI_CTL_SIZE);
+	    free(cur_midictl);
+	}
 
-        event_index = 0;
+	event_index = 0;
 
 	while (jack_midi_event_get(&jack_midi_event, midi_in_buf, 
 					event_index++) == 0) {
@@ -257,6 +260,12 @@ static int process_callback(jack_nframes_t nframes, void *arg) {
 	    if (jack_midi_event.buffer[0] == MIDI_CLOCK_TICK
 			    && midi_clock_counting) {
 		midi_clock_count++;
+#if SET_BBT
+		if ((midi_clock_count % TICKS_PER_BAR) == 0) {
+		    transport_status |= TRANSPORT_LOOP;
+		    pthread_cond_signal(&read_data_ready);
+		}
+#endif
 	    }
 	    if (jack_midi_event.buffer[0] == MIDI_CLOCK_CONT) {
 		transport_status |= TRANSPORT_RUNNING;
@@ -353,7 +362,6 @@ static void timebase_callback(jack_transport_state_t state,
 	    jack_transport_locate(jack_client, new_frame);
 	}
 
-#define SET_BBT 1
 #if SET_BBT
 	// FIXME: Check locking
 	pos->valid = JackPositionBBT;
@@ -414,9 +422,9 @@ static int jack_init(const char *client_name) {
 
 /* Must have midi_lock before calling this function */
 static void send_one_midiled(uint8_t control, uint8_t value) {
-        uint8_t data[MIDI_CTL_SIZE];
-        CONTROL_TO_BUFFER(data, control, value);
-        add_midictl_event(&midictl_led_list, data, MIDI_CTL_SIZE);
+	uint8_t data[MIDI_CTL_SIZE];
+	CONTROL_TO_BUFFER(data, control, value);
+	add_midictl_event(&midictl_led_list, data, MIDI_CTL_SIZE);
 }
 
 #define MIDI2JACKSYNC
@@ -462,12 +470,12 @@ static int process_read_data(void) {
 	jack_position_t pos;
 	long measure, frame;
 
-        pthread_mutex_lock(&midi_lock);
+	pthread_mutex_lock(&midi_lock);
 
-        while (	(midictl_in_list == NULL) && !transport_change ) {
-            pthread_cond_wait(&read_data_ready, &midi_lock);
+	while (	(midictl_in_list == NULL) && !transport_change ) {
+	    pthread_cond_wait(&read_data_ready, &midi_lock);
 	    transport_change = old_transport_status != transport_status;
-        }
+	}
 
 	if (midictl_in_list) {
 	    cur_midictl = midictl_in_list;
@@ -540,31 +548,39 @@ static int process_read_data(void) {
 	}
 
 	if (transport_change) {
-	    if (transport_status & TRANSPORT_RUNNING) {
-		jack_transport_start(jack_client);
-		add_rltm_event(&midi_rltm_list, midi_clock_count ? 
-				MIDI_CLOCK_CONT : MIDI_CLOCK_START);
-		midi_clock_counting = 1;
+	    if (transport_status & TRANSPORT_LOOP) {
+		if (looping > 0) {
+		    if (((midiclk_bars()-1) % looping) == 0)
+			add_rltm_event(&midi_rltm_list, MIDI_CLOCK_START);
+		}
+		transport_status &= ~TRANSPORT_LOOP;
 	    } else {
-		jack_transport_stop(jack_client);
-		add_rltm_event(&midi_rltm_list, MIDI_CLOCK_STOP);
-		midi_clock_counting = 0;
+		if (transport_status & TRANSPORT_RUNNING) {
+		    jack_transport_start(jack_client);
+		    add_rltm_event(&midi_rltm_list, midi_clock_count ? 
+				    MIDI_CLOCK_CONT : MIDI_CLOCK_START);
+		    midi_clock_counting = 1;
+		} else {
+		    jack_transport_stop(jack_client);
+		    add_rltm_event(&midi_rltm_list, MIDI_CLOCK_STOP);
+		    midi_clock_counting = 0;
+		}
+		do_led_update = 1;
 	    }
-	    do_led_update = 1;
 	}
 
 	if (do_led_update) update_leds();
 
 	old_transport_status = transport_status;
 
-        pthread_mutex_unlock(&midi_lock);
+	pthread_mutex_unlock(&midi_lock);
 
-        return 0;
+	return 0;
 }
 
 int main(int argc, char **argv) {
 	if (argc < 2) {
-	    printf("Usage: %s tempo [jitter tolerance]\n", argv[0]);
+	    printf("Usage: %s tempo [loop] [jitter tolerance]\n", argv[0]);
 	    printf("To disable midi clock synchronisation, "
 			    "enter a negative tempo\n");
 	    exit(1);
@@ -576,11 +592,16 @@ int main(int argc, char **argv) {
 	    printf("Midi clock tempo: %ibpm\n", tempo);
 	    printf("Jitter tolerance: ");
 	    if (argc > 2) {
-		jitter_tolerance = atoi(argv[2]);
+		looping = atoi(argv[2]);
+	    }
+	    if (argc > 3) {
+		jitter_tolerance = atoi(argv[3]);
 	    } else {
 		jitter_tolerance = JITTER_TOLERANCE;
 	    }
 	    printf("%ims\n", jitter_tolerance);
+	    printf("Loop mode %s\n", looping > 0 ? "on" : "off");
+	    printf("Loop bars: %i\n", looping);
 	}
 
 	if (avr_api_init(CLIENT_CONTROLLER_NAME,
