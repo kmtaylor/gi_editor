@@ -27,6 +27,10 @@ PKG_CHECK_MODULES([PANEL], [panel])
 PKG_CHECK_MODULES([FORM], [form])
 PKG_CHECK_MODULES([MENU], [menu])
 
+AC_CHECK_FUNC(pthread_create, [],
+    AC_CHECK_LIB(pthread, pthread_create, [],
+        AC_MSG_ERROR([*** gi_editor requires POSIX threads support])))
+
 create_shared_lib=""
 case "$host_os" in
     cygwin*)

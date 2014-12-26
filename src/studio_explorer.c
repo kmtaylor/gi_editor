@@ -50,8 +50,15 @@ struct s_name_list {
 	name_list_t *next;
 };
 
+struct priv_dirent {
+	struct dirent *file;
+	int name_wanted;
+};
+
 static int global_want_quit;
 static name_list_t *patch_names;
+static char *current_dir_init = STUDIO_DIR;
+static char *current_dir;
 
 void report_error(char *msg) {
 	char *message[2];
@@ -183,8 +190,15 @@ static void branch(char *const prog, char *const argv[]) {
 
 static char *full_filename(const char *file) {
 	char *file_path;
-	asprintf(&file_path, "%s/%s", STUDIO_DIR, file);
+	asprintf(&file_path, "%s/%s", current_dir, file);
 	return file_path;
+}
+
+static void pivot_root(const char *new_root) {
+	char *file_path;
+	asprintf(&file_path, "%s/%s", current_dir, new_root);
+	if (current_dir != current_dir_init) free(current_dir);
+	current_dir = file_path;
 }
 
 static int get_string(char *message, char **string) {
@@ -322,16 +336,18 @@ static int read_studio_set(int *copy_depth) {
 	return retval;
 }
 
-static void print_rhc(struct dirent *cur_file, int *copy_depth,
+static void print_rhc(struct priv_dirent *cur_file, int *copy_depth,
 		WINDOW *menu_sub_win, int skip, int i) {
 	char *print_string = NULL;
 	char *func_name = "print_rhc()";
 	name_list_t *cur_patch;
 
+	if (!cur_file->name_wanted) return;
+
 	/* First check if we've cached this patch */
 	cur_patch = patch_names;
 	while (cur_patch) {
-	    if (cur_patch->file_dirent == cur_file) {
+	    if (cur_patch->file_dirent == cur_file->file) {
 		print_string = cur_patch->name;
 		goto found;
 	    }
@@ -339,7 +355,7 @@ static void print_rhc(struct dirent *cur_file, int *copy_depth,
 	}
 
 	/* Not found, so add it to the cache */
-	if (!parse_file(cur_file, copy_depth))
+	if (!parse_file(cur_file->file, copy_depth))
 	    print_string = libgieditor_get_copy_patch_name();
 
 	if (!patch_names) {
@@ -354,7 +370,7 @@ static void print_rhc(struct dirent *cur_file, int *copy_depth,
 
 	cur_patch->next = NULL;
 	cur_patch->name = print_string;
-	cur_patch->file_dirent = cur_file;
+	cur_patch->file_dirent = cur_file->file;
 
 found:
 	if (print_string) PRINT_STRING(print_string, i - skip)
@@ -404,16 +420,21 @@ static void do_paste(int *copy_depth) {
 	}
 }
 
-static char *make_long_name(const char *orig_name, int len) {
+static char *make_long_name(struct dirent *cur_file, int len) {
 	int i;
 	char *long_name;
 	char *func_name = "make_long_name()";
 
 	long_name = allocate(char, len + 1, func_name);
 
-	strncpy(long_name, orig_name, len);
+	if (cur_file->d_type == DT_DIR) {
+	    strncpy(long_name, cur_file->d_name, len);
+	    strncat(long_name, "/", len);
+	} else {
+	    strncpy(long_name, cur_file->d_name, len);
+	}
 
-	for (i = strlen(orig_name); i < len; i++) {
+	for (i = strlen(long_name); i < len; i++) {
 	    long_name[i] = ' ';
 	}
 	long_name[len] = '\0';
@@ -423,13 +444,18 @@ static char *make_long_name(const char *orig_name, int len) {
 
 static int file_filter(const struct dirent *entry) {
 	struct stat file_info;
-	char *filename;
+	if (!strcmp(entry->d_name, "..")) return 1;
 	if (entry->d_name[0] == '.') return 0;
-	filename = full_filename(entry->d_name);
-	if (stat(filename, &file_info) < 0) return 0;
-	free(filename);
-	if (!S_ISREG(file_info.st_mode)) return 0;
-	return 1;
+	if (entry->d_type == DT_DIR) return 1;
+	if (entry->d_type == DT_REG) return 1;
+	return 0;
+}
+
+int file_sorter (const struct dirent **a, const struct dirent **b) {
+	if (((*a)->d_type == DT_DIR) && ((*b)->d_type == DT_REG)) return -1;
+	if (((*a)->d_type == DT_REG) && ((*b)->d_type == DT_DIR)) return 1;
+
+	return strverscmp ((*a)->d_name, (*b)->d_name);
 }
 
 static char *studio_explorer(char **headers, char *footer) {
@@ -451,21 +477,34 @@ static char *studio_explorer(char **headers, char *footer) {
 	char **long_names;
 	char *loaded_patch_name = NULL;
 	struct dirent **dir_contents;
-	struct dirent *cur_file;
+	struct priv_dirent *cur_entry;
+	struct priv_dirent *dir_data;
 
-	n_members = scandir(STUDIO_DIR, &dir_contents,
-			    file_filter, versionsort);
+	n_members = scandir(current_dir, &dir_contents,
+			    file_filter, file_sorter);
+
+	if (n_members < 0) {
+	    char *message[3];
+	    message[0] = "Error:";
+	    message[1] = "Could not open directory:";
+	    message[2] = current_dir;
+	    dialog_box(3, message, dialog_continue);
+
+	    return NULL;
+	}
 	
 	cbreak(); clear();
 
 	long_names = allocate(char *, n_members, func_name);
+	dir_data = allocate(struct priv_dirent, n_members, func_name);
+	memset(dir_data, 0, sizeof(struct priv_dirent) * n_members);
 
 	member_items = allocate(ITEM *, n_members + 1, func_name);
 	for (i = 0; i < n_members; i++) {
-	    long_names[i] = make_long_name(dir_contents[i]->d_name,
-			    menu_width);
+	    long_names[i] = make_long_name(dir_contents[i], menu_width);
 	    member_items[i] = new_item(long_names[i], NULL);
-	    set_item_userptr(member_items[i], (void *) dir_contents[i]);
+	    dir_data[i].file = dir_contents[i];
+	    set_item_userptr(member_items[i], (void *) &dir_data[i]);
 	}
 	member_items[n_members] = NULL;
 
@@ -493,8 +532,9 @@ static char *studio_explorer(char **headers, char *footer) {
 	do {
 		if (damaged) {
 		    for (i = skip; i < n_members; i++) {
-			cur_file = item_userptr(member_items[i]);
-			print_rhc(cur_file, &copy_depth, menu_sub_win, skip, i);
+			cur_entry = item_userptr(member_items[i]);
+			print_rhc(cur_entry, &copy_depth,
+					menu_sub_win, skip, i);
 		    }
 		    damaged = 0;
 		    if (!first_draw) wrefresh(menu_sub_win);
@@ -504,6 +544,16 @@ static char *studio_explorer(char **headers, char *footer) {
 		doupdate();
 		c = getch();
 		switch(c) {
+		    case 10:
+			cur = current_item(explorer_menu);
+                        cur_entry = item_userptr(cur);
+                        if (cur_entry->file->d_type != DT_DIR) break;
+                        if (loaded_patch_name) free(loaded_patch_name);
+                        loaded_patch_name = strdup(cur_entry->file->d_name);
+			pivot_root(cur_entry->file->d_name);
+			want_break = 1;
+			want_restart = 1;
+			break;
 		    case KEY_DOWN:
 		    case '/':
 			if ( position == LINES - 3 - (2 * n_parents) ) { 
@@ -526,26 +576,28 @@ static char *studio_explorer(char **headers, char *footer) {
 			menu_driver(explorer_menu, REQ_UP_ITEM);
 			break;
 		    case 's':
+			cur = current_item(explorer_menu);
+			cur_entry = item_userptr(cur);
+			if (cur_entry->file->d_type != DT_REG) break;
 			{   char *message[1];
 			    message[0] = "Warning: Overwrite current file?";
 			    if (!dialog_box(1, message, dialog_yesno)) break;
 			}
-			cur = current_item(explorer_menu);
-			cur_file = item_userptr(cur);
 			mvprintw(LINES - 1, COLS - 12, " Reading...");
 			update_panels();
 			doupdate();
 			if (!read_studio_set(&copy_depth))
-			    write_file(cur_file->d_name, &copy_depth);
+			    write_file(cur_entry->file->d_name, &copy_depth);
 			mvprintw(LINES - 1, COLS - 12, " Done      ");
 			break;
 		    case 'l':
 			cur = current_item(explorer_menu);
-			cur_file = item_userptr(cur);
+			cur_entry = item_userptr(cur);
+			if (cur_entry->file->d_type != DT_REG) break;
 			mvprintw(LINES - 1, COLS - 12, " Writing...");
 			update_panels();
 			doupdate();
-			parse_file(cur_file, &copy_depth);
+			parse_file(cur_entry->file, &copy_depth);
 			if (loaded_patch_name) free(loaded_patch_name);
 			loaded_patch_name = libgieditor_get_copy_patch_name(); 
 			do_paste(&copy_depth);
@@ -570,6 +622,13 @@ static char *studio_explorer(char **headers, char *footer) {
 			}
 			want_break = 1;
 			want_restart = 1;
+			break;
+		    case 'g':
+			cur = current_item(explorer_menu);
+			cur_entry = item_userptr(cur);
+			if (cur_entry->file->d_type != DT_REG) break;
+			cur_entry->name_wanted = '1';
+			damaged = 1;
 			break;
 		    case 'q':
 			want_break = 1;
@@ -601,9 +660,12 @@ static void studio_explorer_menu_wrapper(void) {
         char *headers[1];
 	char *init_header = " Studio Explorer ";
 	char *footer =  
-	" (R)efresh, (L)oad, (N)ew, (S)ave, (Q)uit. ";
+	" (G)et Name, (R)efresh, (L)oad, (N)ew, (S)ave, (Q)uit. ";
 	int init = 1;
 	char *patch_name = "";
+
+	current_dir = current_dir_init;
+	
 	while(patch_name) {
 	    if (init) {
 		headers[0] = init_header;
@@ -700,7 +762,7 @@ int main(void) {
 	    dialog_box(2, message, dialog_continue);
 	    global_want_quit = 1;
         }	
-	
+
 	/* Post the menu */
         post_menu(main_menu);
 
