@@ -342,7 +342,10 @@ static void print_rhc(struct priv_dirent *cur_file, int *copy_depth,
 	char *func_name = "print_rhc()";
 	name_list_t *cur_patch;
 
-	if (!cur_file->name_wanted) return;
+	if (!cur_file->name_wanted) { 
+	    BLANK_LINE(i - skip);
+	    return;
+	}
 
 	/* First check if we've cached this patch */
 	cur_patch = patch_names;
@@ -556,9 +559,9 @@ static char *studio_explorer(char **headers, char *footer) {
 			break;
 		    case KEY_DOWN:
 		    case '/':
-			if ( position == LINES - 3 - (2 * n_parents) ) { 
+			if ( position == LINES - 6 - (2 * n_parents) ) { 
 			    if (skip <
-				    (n_members - LINES + 2 + (2 * n_parents))) {
+				    (n_members - LINES + 5 + (2 * n_parents))) {
 				skip++;
 				damaged = 1;
 			    }
